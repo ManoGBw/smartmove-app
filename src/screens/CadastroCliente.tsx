@@ -71,7 +71,7 @@ export function CadastroCliente({ navigation }: CadastroClienteProps) {
           UF: formData.uf,
           telefone: formData.telefone,
           email: formData.email,
-          status: formData.status,
+          status: formData.status ? "ATIVO" : "INATIVO",
         }),
       });
 
