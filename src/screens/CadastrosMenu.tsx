@@ -1,14 +1,11 @@
-// src/screens/CadastrosMenu.tsx
-
 import { ArrowLeft, CreditCard, Package, Users } from 'lucide-react-native';
 import React from 'react';
 import {
-    Alert,
-    SafeAreaView,
+    Alert, SafeAreaView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { theme } from '../theme/colors';
 
@@ -45,10 +42,11 @@ const cadastroOptions = [
 
 export function CadastrosMenu({ navigation }: CadastrosMenuProps) {
     const handleOptionPress = (optionId: string) => {
-        // Futuramente, você pode navegar para telas específicas
-        // ex: navigation.navigate('CadastroClientes');
-        console.log(`Navegar para o cadastro de: ${optionId}`);
-        Alert.alert("Em desenvolvimento", `A tela para gerenciar ${optionId} ainda não foi criada.`);
+        if (optionId === 'clientes') {
+            navigation.navigate('CadastroCliente');
+        } else {
+            Alert.alert("Em desenvolvimento", `A tela para gerenciar ${optionId} ainda não foi criada.`);
+        }
     };
 
     return (

@@ -3,6 +3,7 @@ import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 
+import { CadastroCliente } from '../screens/CadastroCliente';
 import { CadastrosMenu } from '../screens/CadastrosMenu';
 import { Dashboard } from '../screens/Dashboard';
 import { ForgotPasswordScreen } from '../screens/ForgotPassword';
@@ -24,6 +25,7 @@ const AppRoutes = () => (
     <AppStack.Navigator screenOptions={{ headerShown: false }}>
         <AppStack.Screen name="Dashboard" component={Dashboard} />
         <AppStack.Screen name="CadastrosMenu" component={CadastrosMenu} />
+        <AppStack.Screen name="CadastroCliente" component={CadastroCliente} />
     </AppStack.Navigator>
 );
 

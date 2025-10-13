@@ -60,7 +60,9 @@ src/
 ## Comandos Úteis
 
 - `npm start` ou `npx expo start`: Inicia o servidor de desenvolvimento.
+- `npm install react-native-picker-select`: Instalar a Biblioteca para o Seletor (Picker)
 - `npx expo start --android`: Inicia o servidor e tenta abrir o app em um emulador Android (se configurado).
 - `npx expo start --ios`: Inicia o servidor e tenta abrir o app em um simulador iOS (requer macOS).
 - `npx expo start -c`: inicia limpando cache
 - `npx expo install expo-secure-store`: instalar expo-secure para armazenar o token
+
