@@ -1,6 +1,8 @@
 import { ArrowLeft, Eye, EyeOff, Lock, Mail, Phone, User } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
+    ActivityIndicator,
+    Alert,
     SafeAreaView,
     ScrollView,
     StyleSheet,
@@ -9,11 +11,12 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { theme } from '../theme/colors';
 
-// Tipagem para as props de navegação
+// URL base da sua API
+const API_URL = 'http://72.60.12.191:3006/api/v1';
+
 type RegisterScreenProps = {
     navigation: {
         navigate: (screen: string) => void;
@@ -30,20 +33,65 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
     });
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [loading, setLoading] = useState(false); // Estado de carregamento
 
     const handleInputChange = (field: string, value: string) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
 
-    const handleRegister = () => {
-        console.log('Registrando usuário:', formData);
-        navigation.navigate('Login');
+    // --- FUNÇÃO DE REGISTRO ATUALIZADA ---
+    const handleRegister = async () => {
+        // 1. Validação dos campos
+        if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
+            Alert.alert('Atenção', 'Por favor, preencha todos os campos obrigatórios.');
+            return;
+        }
+        if (formData.password !== formData.confirmPassword) {
+            Alert.alert('Atenção', 'As senhas não coincidem.');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            // 2. Monta a requisição para a API
+            const response = await fetch(`${API_URL}/usuarios/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    // Enviando apenas os campos que a API espera por enquanto
+                    email: formData.email.toLowerCase(),
+                    senha: formData.password,
+                    // Futuramente você pode enviar outros campos, como o nome:
+                    // nome: formData.name, 
+                }),
+            });
+
+            const data = await response.json();
+
+            // 3. Verifica se a API retornou um erro
+            if (!response.ok) {
+                throw new Error(data.message || 'Não foi possível criar a conta.');
+            }
+
+            // 4. Se o cadastro for bem-sucedido
+            Alert.alert(
+                'Sucesso!',
+                'Sua conta foi criada. Você será redirecionado para a tela de login.',
+                [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+            );
+
+        } catch (error: any) {
+            // 5. Se qualquer erro ocorrer, exibe um alerta
+            console.error('Erro no cadastro:', error);
+            Alert.alert('Erro no Cadastro', error.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
-                {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.backButton}>
                         <ArrowLeft size={20} color={theme.colors.primary} />
@@ -54,9 +102,9 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
                     </View>
                 </View>
 
-                {/* Formulário */}
                 <Card>
                     <CardContent>
+                        {/* --- Os campos do formulário continuam os mesmos --- */}
                         {/* Nome Completo */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Nome completo</Text>
@@ -71,7 +119,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
                                 />
                             </View>
                         </View>
-
                         {/* E-mail */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>E-mail</Text>
@@ -88,8 +135,7 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
                                 />
                             </View>
                         </View>
-
-                        {/* Telefone */}
+                        {/* Telefone (opcional pela API, mas mantemos no form) */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Telefone</Text>
                             <View style={styles.inputContainer}>
@@ -104,7 +150,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
                                 />
                             </View>
                         </View>
-
                         {/* Senha */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Senha</Text>
@@ -119,15 +164,10 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
                                     placeholderTextColor={theme.colors.foreground}
                                 />
                                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-                                    {showPassword ? (
-                                        <EyeOff color={theme.colors.foreground} size={16} />
-                                    ) : (
-                                        <Eye color={theme.colors.foreground} size={16} />
-                                    )}
+                                    {showPassword ? <EyeOff color={theme.colors.foreground} size={16} /> : <Eye color={theme.colors.foreground} size={16} />}
                                 </TouchableOpacity>
                             </View>
                         </View>
-
                         {/* Confirmar Senha */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Confirmar senha</Text>
@@ -142,20 +182,23 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
                                     placeholderTextColor={theme.colors.foreground}
                                 />
                                 <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeIcon}>
-                                    {showConfirmPassword ? (
-                                        <EyeOff color={theme.colors.foreground} size={16} />
-                                    ) : (
-                                        <Eye color={theme.colors.foreground} size={16} />
-                                    )}
+                                    {showConfirmPassword ? <EyeOff color={theme.colors.foreground} size={16} /> : <Eye color={theme.colors.foreground} size={16} />}
                                 </TouchableOpacity>
                             </View>
                         </View>
 
-                        <Button
-                            title="Criar Conta"
+                        {/* --- Botão de Registro Atualizado --- */}
+                        <TouchableOpacity
+                            style={[styles.button, loading && styles.buttonDisabled]}
                             onPress={handleRegister}
-                            style={{ marginTop: theme.spacing.lg }}
-                        />
+                            disabled={loading}
+                        >
+                            {loading ? (
+                                <ActivityIndicator color="#ffffff" />
+                            ) : (
+                                <Text style={styles.buttonText}>Criar Conta</Text>
+                            )}
+                        </TouchableOpacity>
 
                         <View style={styles.footerTextContainer}>
                             <Text style={styles.footerText}>Já tem uma conta?{' '}</Text>
@@ -170,7 +213,9 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
     );
 }
 
+// Adicione os estilos do botão ao seu StyleSheet
 const styles = StyleSheet.create({
+    // ... todos os seus estilos anteriores ...
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
@@ -229,6 +274,22 @@ const styles = StyleSheet.create({
         position: 'absolute',
         right: 12,
         padding: 4,
+    },
+    button: { // Estilo para o TouchableOpacity
+        backgroundColor: theme.colors.primary,
+        height: 55,
+        borderRadius: theme.radius.md,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: theme.spacing.lg,
+    },
+    buttonDisabled: {
+        backgroundColor: theme.colors.foreground,
+    },
+    buttonText: {
+        color: theme.colors.primaryForeground,
+        fontSize: 18,
+        fontWeight: 'bold',
     },
     footerTextContainer: {
         flexDirection: 'row',

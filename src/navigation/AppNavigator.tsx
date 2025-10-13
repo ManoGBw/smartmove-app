@@ -1,23 +1,44 @@
-// src/navigation/AppNavigator.tsx
 import { createStackNavigator } from '@react-navigation/stack';
 import React from 'react';
+import { ActivityIndicator, View } from 'react-native';
+import { useAuth } from '../context/AuthContext';
 
+import { CadastrosMenu } from '../screens/CadastrosMenu';
+import { Dashboard } from '../screens/Dashboard';
 import { ForgotPasswordScreen } from '../screens/ForgotPassword';
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
-// Importe outras telas aqui quando as converter
-// import { Dashboard } from '../screens/Dashboard';
 
-const Stack = createStackNavigator();
+const AuthStack = createStackNavigator();
+const AppStack = createStackNavigator();
+
+const AuthRoutes = () => (
+    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+        <AuthStack.Screen name="Login" component={LoginScreen} />
+        <AuthStack.Screen name="Register" component={RegisterScreen} />
+        <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+    </AuthStack.Navigator>
+);
+
+const AppRoutes = () => (
+    <AppStack.Navigator screenOptions={{ headerShown: false }}>
+        <AppStack.Screen name="Dashboard" component={Dashboard} />
+        <AppStack.Screen name="CadastrosMenu" component={CadastrosMenu} />
+    </AppStack.Navigator>
+);
 
 export function AppNavigator() {
-    return (
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Register" component={RegisterScreen} />
-            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-            {/* Adicione outras telas aqui */}
-            {/* <Stack.Screen name="Dashboard" component={Dashboard} /> */}
-        </Stack.Navigator>
-    );
+    const { token, loading } = useAuth();
+
+
+    if (loading) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" />
+            </View>
+        );
+    }
+
+    // Se tiver token, mostra as telas do app. Se não, mostra as de autenticação.
+    return token ? <AppRoutes /> : <AuthRoutes />;
 }

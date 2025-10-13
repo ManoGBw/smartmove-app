@@ -63,4 +63,4 @@ src/
 - `npx expo start --android`: Inicia o servidor e tenta abrir o app em um emulador Android (se configurado).
 - `npx expo start --ios`: Inicia o servidor e tenta abrir o app em um simulador iOS (requer macOS).
 - `npx expo start -c`: inicia limpando cache
-- `npx expo start -
+- `npx expo install expo-secure-store`: instalar expo-secure para armazenar o token
