@@ -13,6 +13,7 @@ Este é o repositório para o aplicativo mobile de gerenciamento de vendas Smart
 ## Pré-requisitos
 
 Antes de começar, você vai precisar ter instalado em sua máquina:
+
 - [Node.js](https://nodejs.org/en/) (versão LTS recomendada)
 - [NPM](https://www.npmjs.com/) ou [Yarn](https://yarnpkg.com/)
 - O aplicativo **Expo Go** instalado no seu dispositivo de teste (Android/iOS).
@@ -40,6 +41,7 @@ npx expo start
 Após executar o comando, um QR Code será exibido no terminal.
 
 **Para rodar no seu celular:**
+
 1.  Certifique-se de que seu computador e seu celular estejam conectados na **mesma rede Wi-Fi**.
 2.  Abra o aplicativo **Expo Go** no seu dispositivo.
 3.  Escaneie o QR Code exibido no terminal.
@@ -65,4 +67,4 @@ src/
 - `npx expo start --ios`: Inicia o servidor e tenta abrir o app em um simulador iOS (requer macOS).
 - `npx expo start -c`: inicia limpando cache
 - `npx expo install expo-secure-store`: instalar expo-secure para armazenar o token
-
+- `npx expo start --tunnel` : inicia fora da tere de interna
