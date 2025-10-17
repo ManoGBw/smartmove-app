@@ -68,3 +68,4 @@ src/
 - `npx expo start -c`: inicia limpando cache
 - `npx expo install expo-secure-store`: instalar expo-secure para armazenar o token
 - `npx expo start --tunnel` : inicia fora da tere de interna
+- `npm install react-native-toast-message` - instalar biblioteca de mensagens de feedback

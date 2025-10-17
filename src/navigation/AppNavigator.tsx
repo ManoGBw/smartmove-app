@@ -4,11 +4,13 @@ import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "../context/AuthContext";
 
 import { CadastroCliente } from "../screens/CadastroCliente";
+import { CadastroFormaPagamento } from "../screens/CadastroFormaPagamento";
 import { CadastroProduto } from "../screens/CadastroProduto";
 import { CadastrosMenu } from "../screens/CadastrosMenu";
 import { Dashboard } from "../screens/Dashboard";
 import { ForgotPasswordScreen } from "../screens/ForgotPassword";
 import { LoginScreen } from "../screens/LoginScreen";
+import { RealizarVenda } from "../screens/RealizarVenda";
 import { RegisterScreen } from "../screens/RegisterScreen";
 
 const AuthStack = createStackNavigator();
@@ -28,6 +30,11 @@ const AppRoutes = () => (
     <AppStack.Screen name="CadastrosMenu" component={CadastrosMenu} />
     <AppStack.Screen name="CadastroCliente" component={CadastroCliente} />
     <AppStack.Screen name="CadastroProduto" component={CadastroProduto} />
+    <AppStack.Screen
+      name="CadastroFormaPagamento"
+      component={CadastroFormaPagamento}
+    />
+    <AppStack.Screen name="RealizarVenda" component={RealizarVenda} />
   </AppStack.Navigator>
 );
 

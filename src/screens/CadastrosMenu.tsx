@@ -47,11 +47,10 @@ export function CadastrosMenu({ navigation }: CadastrosMenuProps) {
       navigation.navigate("CadastroCliente");
     } else if (optionId === "produtos") {
       navigation.navigate("CadastroProduto");
+    } else if (optionId === "formas-pagamento") {
+      navigation.navigate("CadastroFormaPagamento");
     } else {
-      Alert.alert(
-        "Em desenvolvimento",
-        `A tela para gerenciar ${optionId} ainda não foi criada.`
-      );
+      Alert.alert("Acesso indisponível, entre em contato com o suporte");
     }
   };
 
