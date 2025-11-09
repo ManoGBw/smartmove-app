@@ -14,7 +14,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+// 1. Importar o useAuth
+import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
+
+// 2. Definir a URL da API
+const API_URL = "http://72.60.12.191:3006/api/v1";
 
 type CadastroProdutoProps = {
   navigation: {
@@ -23,6 +28,9 @@ type CadastroProdutoProps = {
 };
 
 export function CadastroProduto({ navigation }: CadastroProdutoProps) {
+  // 3. Obter o token do contexto
+  const { token } = useAuth();
+
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     nome: "",
@@ -52,6 +60,7 @@ export function CadastroProduto({ navigation }: CadastroProdutoProps) {
     handleInputChange(field, formatted);
   };
 
+  // Esta função é crucial para converter o valor formatado (ex: "1.234,56") em número (ex: 1234.56)
   const parseCurrency = (value: string): number => {
     if (!value) return 0;
     // Remove o separador de milhar e troca a vírgula por ponto
@@ -69,16 +78,54 @@ export function CadastroProduto({ navigation }: CadastroProdutoProps) {
     return "-";
   };
 
+  // 4. Atualizar a função handleSave
   const handleSave = async () => {
-    console.log("Salvando produto:", formData);
-    // Futuramente, a lógica da API virá aqui
+    // Validação básica
+    if (!formData.nome || !formData.valor || !formData.estoque) {
+      Alert.alert("Atenção", "Por favor, preencha os campos obrigatórios (*).");
+      return;
+    }
+
     setLoading(true);
-    // Simula uma chamada de API
-    setTimeout(() => {
-      setLoading(false);
-      Alert.alert("Sucesso", "Produto salvo! (simulação)");
+
+    try {
+      // 5. Preparar o corpo da requisição
+      const bodyPayload = {
+        nome: formData.nome,
+        marca: formData.marca || null, // Envia 'null' se a marca estiver vazia
+        valorVenda: parseCurrency(formData.valor), // Converte para número
+        custo: parseCurrency(formData.custo), // Converte para número
+        estoque: parseInt(formData.estoque, 10) || 0, // Converte para número
+        status: formData.status ? "ATIVO" : "INATIVO", // Converte booleano para string
+        // O campo 'referencia' não está no seu exemplo de API, então não o enviamos.
+      };
+
+      // 6. Realizar a chamada fetch
+      const response = await fetch(`${API_URL}/produtos`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`, // Adiciona o token de autorização
+        },
+        body: JSON.stringify(bodyPayload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Não foi possível salvar o produto.");
+      }
+
+      // 7. Sucesso
+      Alert.alert("Sucesso!", "Produto cadastrado com sucesso.");
       navigation.goBack();
-    }, 1500);
+    } catch (error: any) {
+      // 8. Tratamento de erro
+      console.error("Erro ao salvar produto:", error);
+      Alert.alert("Erro", error.message || "Ocorreu um erro inesperado.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

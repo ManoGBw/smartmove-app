@@ -69,3 +69,4 @@ src/
 - `npx expo install expo-secure-store`: instalar expo-secure para armazenar o token
 - `npx expo start --tunnel` : inicia fora da tere de interna
 - `npm install react-native-toast-message` - instalar biblioteca de mensagens de feedback
+- `npx expo install expo-print npx expo install expo-sharing` - instalar biblioteca para gerar PDF

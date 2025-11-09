@@ -1,3 +1,5 @@
+// src/screens/CadastroFormaPagamento.tsx
+
 import { ArrowLeft, CreditCard, Save } from "lucide-react-native";
 import React, { useState } from "react";
 import {
@@ -6,12 +8,18 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Switch, // 1. Importar o Switch
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+// 2. Importar o useAuth
+import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
+
+// 3. Definir a URL da API
+const API_URL = "http://72.60.12.191:3006/api/v1";
 
 // --- Componente customizado para simular um Radio Button ---
 interface RadioOptionProps {
@@ -48,30 +56,64 @@ type CadastroProps = {
 };
 
 export function CadastroFormaPagamento({ navigation }: CadastroProps) {
+  // 4. Obter o token
+  const { token } = useAuth();
   const [loading, setLoading] = useState(false);
+
+  // 5. Adicionar 'status' ao estado do formulário
   const [formData, setFormData] = useState({
     descricao: "",
-    tipo: "a vista",
+    tipo: "a vista", // Este campo 'tipo' não parece ser usado pela API, vamos ignorá-lo no envio
     permiteParcelamento: "nao",
+    status: true, // Novo campo de status
   });
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSave = () => {
+  // 6. Atualizar a função handleSave
+  const handleSave = async () => {
     if (!formData.descricao) {
       Alert.alert("Atenção", "O campo Descrição é obrigatório.");
       return;
     }
     setLoading(true);
-    console.log("Salvando forma de pagamento:", formData);
-    // Simula uma chamada de API
-    setTimeout(() => {
-      setLoading(false);
-      Alert.alert("Sucesso", "Forma de pagamento salva! (simulação)");
+
+    try {
+      // 7. Preparar o payload para a API
+      const bodyPayload = {
+        nome: formData.descricao,
+        aceitaParcelamento: formData.permiteParcelamento === "sim", // Converte "sim"/"nao" para true/false
+        status: formData.status ? "Ativo" : "Inativo", // Converte true/false para "Ativo"/"Inativo"
+      };
+
+      // 8. Fazer a chamada fetch
+      const response = await fetch(`${API_URL}/formas-pagamento`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(bodyPayload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Não foi possível salvar a forma de pagamento."
+        );
+      }
+
+      Alert.alert("Sucesso!", "Forma de pagamento salva com sucesso.");
       navigation.goBack();
-    }, 1500);
+    } catch (error: any) {
+      console.error("Erro ao salvar forma de pagamento:", error);
+      Alert.alert("Erro", error.message || "Ocorreu um erro inesperado.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -136,6 +178,22 @@ export function CadastroFormaPagamento({ navigation }: CadastroProps) {
               value="nao"
               selectedValue={formData.permiteParcelamento}
               onSelect={(v) => handleInputChange("permiteParcelamento", v)}
+            />
+          </View>
+
+          {/* 9. Adicionar o Switch de Status */}
+          <View style={styles.switchContainer}>
+            <View>
+              <Text style={styles.label}>Status</Text>
+              <Text style={styles.switchLabel}>
+                {formData.status ? "Ativo" : "Inativo"}
+              </Text>
+            </View>
+            <Switch
+              trackColor={{ false: "#767577", true: theme.colors.secondary }}
+              thumbColor={formData.status ? theme.colors.primary : "#f4f3f4"}
+              onValueChange={(value) => handleInputChange("status", value)}
+              value={formData.status}
             />
           </View>
 
@@ -276,4 +334,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
   },
+  // Estilo para o Switch (copiado do CadastroProduto)
+  switchContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: theme.colors.muted,
+    padding: 16,
+    borderRadius: 8,
+    marginTop: 10, // Adicionei uma margem
+    marginBottom: 20, // Adicionei uma margem
+  },
+  switchLabel: { fontSize: 14, color: theme.colors.mutedForeground },
 });

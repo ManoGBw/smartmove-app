@@ -90,6 +90,8 @@ export function Dashboard({ navigation }: DashboardProps) {
       navigation.navigate("CadastrosMenu");
     } else if (screenId === "realizar-venda") {
       navigation.navigate("RealizarVenda");
+    } else if (screenId === "orcamento") {
+      navigation.navigate("OrcamentoScreen");
     } else {
       // Para os outros botões que ainda não têm tela
       Alert.alert(
