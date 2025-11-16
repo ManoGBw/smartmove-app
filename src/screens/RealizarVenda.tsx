@@ -10,8 +10,9 @@ import {
   Trash2,
   X,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   SafeAreaView,
@@ -24,70 +25,39 @@ import {
 } from "react-native";
 import RNPickerSelect from "react-native-picker-select";
 import Toast from "react-native-toast-message";
+import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
 
-// Tipos de dados (podem ser movidos para um arquivo de tipos no futuro)
+const API_URL = "http://72.60.12.191:3006/api/v1";
+
+// --- NOVAS E ATUALIZADAS INTERFACES ---
 interface Product {
-  id: string;
-  name: string;
-  price: number;
-  stock: number;
+  id: number; // Alterado para number
+  nome: string; // Alterado de 'name' para 'nome'
+  valorVenda: number; // Alterado de 'price' para 'valorVenda'
+  estoque: number; // Alterado de 'stock' para 'estoque'
   quantity?: number;
 }
 interface Client {
-  id: string;
-  name: string;
-  cpf: string;
-  phone: string;
+  id: number;
+  nome: string;
+  cpf: string | null;
+  telefone: string | null;
+  // Outros campos do cliente
 }
 interface PaymentMethod {
-  id: string;
-  description: string;
-  type: "a vista" | "a prazo";
-  allowsInstallments: boolean;
+  id: number;
+  nome: string;
+  aceitaParcelamento: boolean; // Alterado de 'allowsInstallments' para 'aceitaParcelamento'
+  status: string; // "Ativo" ou "Inativo"
 }
-
-// Mock data (substituir por chamadas de API no futuro)
-const mockClients: Client[] = [
-  {
-    id: "1",
-    name: "João Silva",
-    cpf: "123.456.789-00",
-    phone: "(11) 98765-4321",
-  },
-  {
-    id: "2",
-    name: "Maria Santos",
-    cpf: "987.654.321-00",
-    phone: "(11) 91234-5678",
-  },
-];
-const mockProducts: Product[] = [
-  { id: "1", name: "Notebook Dell Inspiron", price: 2999.9, stock: 10 },
-  { id: "2", name: "Mouse Logitech MX Master", price: 349.9, stock: 25 },
-  { id: "3", name: "Teclado Mecânico Keychron", price: 599.0, stock: 15 },
-];
-const mockPaymentMethods: PaymentMethod[] = [
-  {
-    id: "1",
-    description: "Dinheiro",
-    type: "a vista",
-    allowsInstallments: false,
-  },
-  { id: "2", description: "PIX", type: "a vista", allowsInstallments: false },
-  {
-    id: "3",
-    description: "Cartão de Débito",
-    type: "a vista",
-    allowsInstallments: false,
-  },
-  {
-    id: "4",
-    description: "Cartão de Crédito",
-    type: "a prazo",
-    allowsInstallments: true,
-  },
-];
+interface SalePayment {
+  id: string; // ID local para manipulação da lista
+  formaPagamentoId: number;
+  valorPago: string; // Manter como string formatada para o input
+  parcelas: number;
+}
+// --- FIM DAS INTERFACES ---
 
 type RealizarVendaProps = {
   navigation: {
@@ -96,35 +66,108 @@ type RealizarVendaProps = {
 };
 
 export function RealizarVenda({ navigation }: RealizarVendaProps) {
+  const { token } = useAuth(); // Usar o token para a API
+
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientSearch, setClientSearch] = useState("");
-
   const [selectedProducts, setSelectedProducts] = useState<Product[]>([]);
   const [productSearch, setProductSearch] = useState("");
   const [showProductModal, setShowProductModal] = useState(false);
 
-  const [paymentMethod, setPaymentMethod] = useState("");
-  const [installments, setInstallments] = useState(1);
+  // --- NOVOS ESTADOS PARA PAGAMENTO E DADOS DA API ---
+  const [payments, setPayments] = useState<SalePayment[]>([
+    { id: String(Date.now()), formaPagamentoId: 0, valorPago: "", parcelas: 1 },
+  ]);
   const [discount, setDiscount] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // --- Lógica de Negócio (quase idêntica à versão web) ---
-  const filteredClients = mockClients.filter(
-    (c) =>
-      c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
-      c.cpf.includes(clientSearch)
+  const [allClients, setAllClients] = useState<Client[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [allPaymentMethods, setAllPaymentMethods] = useState<PaymentMethod[]>(
+    []
   );
-  const filteredProducts = mockProducts.filter((p) =>
-    p.name.toLowerCase().includes(productSearch.toLowerCase())
+  const [loadingClients, setLoadingClients] = useState(false);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  // --- FIM DOS NOVOS ESTADOS ---
+
+  // --- FUNÇÕES DE BUSCA DE DADOS NA API ---
+  const fetchClients = useCallback(async () => {
+    if (!token) return;
+    setLoadingClients(true);
+    try {
+      const response = await fetch(`${API_URL}/clientes`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      setAllClients(data);
+    } catch (error) {
+      Alert.alert("Erro", "Falha ao carregar clientes.");
+    } finally {
+      setLoadingClients(false);
+    }
+  }, [token]);
+
+  const fetchProducts = useCallback(async () => {
+    if (!token) return;
+    setLoadingProducts(true);
+    try {
+      const response = await fetch(`${API_URL}/produtos`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      setAllProducts(data);
+    } catch (error) {
+      Alert.alert("Erro", "Falha ao carregar produtos.");
+    } finally {
+      setLoadingProducts(false);
+    }
+  }, [token]);
+
+  const fetchPaymentMethods = useCallback(async () => {
+    if (!token) return;
+    setLoadingPayments(true);
+    try {
+      const response = await fetch(`${API_URL}/formas-pagamento`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      // Filtrar apenas métodos ativos
+      setAllPaymentMethods(
+        data.filter((pm: PaymentMethod) => pm.status === "Ativo")
+      );
+    } catch (error) {
+      Alert.alert("Erro", "Falha ao carregar formas de pagamento.");
+    } finally {
+      setLoadingPayments(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    fetchClients();
+    fetchProducts();
+    fetchPaymentMethods();
+  }, [fetchClients, fetchProducts, fetchPaymentMethods]);
+
+  // --- LÓGICA DE NEGÓCIO ---
+  const filteredClients = allClients.filter(
+    (c) =>
+      c.nome.toLowerCase().includes(clientSearch.toLowerCase()) ||
+      (c.cpf && c.cpf.includes(clientSearch))
+  );
+  const filteredProducts = allProducts.filter((p) =>
+    p.nome.toLowerCase().includes(productSearch.toLowerCase())
   );
 
   const handleSelectClient = (client: Client) => {
     setSelectedClient(client);
     setClientSearch("");
   };
+
   const handleAddProduct = (product: Product) => {
     const existing = selectedProducts.find((p) => p.id === product.id);
     if (existing) {
-      if ((existing.quantity || 0) < product.stock) {
+      if ((existing.quantity || 0) < product.estoque) {
         setSelectedProducts((prev) =>
           prev.map((p) =>
             p.id === product.id ? { ...p, quantity: (p.quantity || 1) + 1 } : p
@@ -139,12 +182,13 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
       Toast.show({ type: "success", text1: "Produto adicionado" });
     }
   };
-  const handleUpdateQuantity = (productId: string, newQuantity: number) => {
-    const product = mockProducts.find((p) => p.id === productId);
+
+  const handleUpdateQuantity = (productId: number, newQuantity: number) => {
+    const product = allProducts.find((p) => p.id === productId);
     if (newQuantity <= 0) {
       setSelectedProducts((prev) => prev.filter((p) => p.id !== productId));
       Toast.show({ type: "info", text1: "Produto removido" });
-    } else if (product && newQuantity <= product.stock) {
+    } else if (product && newQuantity <= product.estoque) {
       setSelectedProducts((prev) =>
         prev.map((p) =>
           p.id === productId ? { ...p, quantity: newQuantity } : p
@@ -154,33 +198,289 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
       Toast.show({ type: "error", text1: "Estoque insuficiente" });
     }
   };
-  const handleRemoveProduct = (productId: string) => {
+
+  const handleRemoveProduct = (productId: number) => {
     handleUpdateQuantity(productId, 0);
   };
-  const getDiscountValue = () => parseFloat(discount.replace(",", ".")) || 0;
+
+  // Funções de Cálculo
+  const parseCurrency = (value: string): number => {
+    if (!value) return 0;
+    const numberString = value.replace(/\./g, "").replace(",", ".");
+    return parseFloat(numberString) || 0;
+  };
+  const formatCurrency = (value: number): string =>
+    value.toFixed(2).replace(".", ",");
+  const getDiscountValue = () => parseCurrency(discount);
+
   const subtotal = selectedProducts.reduce(
-    (sum, p) => sum + p.price * (p.quantity || 1),
+    (sum, p) => sum + p.valorVenda * (p.quantity || 1),
     0
   );
   const total = subtotal - getDiscountValue();
-  const selectedPaymentMethod = mockPaymentMethods.find(
-    (pm) => pm.id === paymentMethod
+  const totalPaid = payments.reduce(
+    (sum, p) => sum + parseCurrency(p.valorPago),
+    0
   );
-  const canInstallment = selectedPaymentMethod?.allowsInstallments || false;
-  const installmentValue = total / installments;
+  const remaining = total - totalPaid;
 
-  const handleFinalizeSale = () => {
-    if (!selectedClient || selectedProducts.length === 0 || !paymentMethod) {
+  // Lógica de Múltiplos Pagamentos
+  const handleAddPayment = () => {
+    setPayments((prev) => [
+      ...prev,
+      {
+        id: String(Date.now()),
+        formaPagamentoId: 0,
+        valorPago: "",
+        parcelas: 1,
+      },
+    ]);
+  };
+
+  const handleRemovePayment = (id: string) => {
+    if (payments.length === 1) {
       Alert.alert(
         "Atenção",
-        "Preencha todos os campos obrigatórios (Cliente, Produto, Pagamento)."
+        "É necessário ter pelo menos uma forma de pagamento."
       );
       return;
     }
-    Toast.show({ type: "success", text1: "Venda realizada com sucesso!" });
-    setTimeout(() => navigation.goBack(), 1500);
+    setPayments((prev) => prev.filter((p) => p.id !== id));
   };
 
+  const handlePaymentChange = (
+    id: string,
+    field: keyof SalePayment,
+    value: string | number
+  ) => {
+    setPayments((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
+    );
+  };
+
+  const handlePaymentValueChange = (id: string, value: string) => {
+    const numericValue = parseCurrency(value);
+
+    // Distribui o valor restante para o pagamento atual se for o primeiro pagamento
+    if (payments.length === 1) {
+      handlePaymentChange(
+        id,
+        "valorPago",
+        formatCurrency(Math.min(numericValue, total))
+      );
+    } else {
+      handlePaymentChange(id, "valorPago", formatCurrency(numericValue));
+    }
+  };
+
+  const handleFinalizeSale = async () => {
+    if (loading) return;
+
+    if (!selectedClient) {
+      Alert.alert("Atenção", "Selecione o cliente.");
+      return;
+    }
+    if (selectedProducts.length === 0) {
+      Alert.alert("Atenção", "Adicione pelo menos um produto.");
+      return;
+    }
+    if (
+      payments.some(
+        (p) => !p.formaPagamentoId || parseCurrency(p.valorPago) <= 0
+      )
+    ) {
+      Alert.alert(
+        "Atenção",
+        "Selecione a forma de pagamento e insira o valor pago em todas as formas."
+      );
+      return;
+    }
+    if (Math.abs(remaining) > 0.01) {
+      // Tolerância de 1 centavo para floating point
+      Alert.alert(
+        "Atenção",
+        `O valor pago (R$ ${totalPaid.toFixed(
+          2
+        )}) não corresponde ao total (R$ ${total.toFixed(
+          2
+        )}). Restante: R$ ${remaining.toFixed(2)}.`
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const payload = {
+        clienteId: selectedClient.id,
+        itens: selectedProducts.map((p) => ({
+          produtoId: p.id,
+          quantidade: p.quantity,
+          valorUnitario: p.valorVenda,
+        })),
+        observacoes: "Venda realizada pelo app Smart Move", // Hardcoded por enquanto
+        desconto: getDiscountValue(),
+        status: "CONCLUIDA",
+        pagamentos: payments.map((p) => ({
+          formaPagamentoId: p.formaPagamentoId,
+          valorPago: parseCurrency(p.valorPago),
+          parcelas: p.parcelas,
+        })),
+      };
+
+      const response = await fetch(`${API_URL}/vendas`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Não foi possível finalizar a venda.");
+      }
+
+      Toast.show({ type: "success", text1: "Venda finalizada com sucesso!" });
+      setTimeout(() => navigation.goBack(), 1500);
+    } catch (error: any) {
+      console.error("Erro ao finalizar venda:", error);
+      Alert.alert(
+        "Erro na Venda",
+        error.message || "Ocorreu um erro inesperado ao salvar a venda."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getPaymentMethodOptions = () =>
+    allPaymentMethods.map((pm) => ({
+      label: pm.nome,
+      value: pm.id,
+      aceitaParcelamento: pm.aceitaParcelamento,
+    }));
+
+  // Componente de Pagamento Individual (para renderizar na lista de payments)
+  const PaymentInput = ({
+    payment,
+    index,
+  }: {
+    payment: SalePayment;
+    index: number;
+  }) => {
+    const selectedMethod = allPaymentMethods.find(
+      (pm) => pm.id === payment.formaPagamentoId
+    );
+    const canInstallment = selectedMethod?.aceitaParcelamento || false;
+
+    // Calcular o valor padrão a ser sugerido
+    let defaultPaymentValue =
+      remaining > 0
+        ? remaining + parseCurrency(payment.valorPago)
+        : parseCurrency(payment.valorPago);
+    defaultPaymentValue = Math.max(0, defaultPaymentValue);
+
+    // Sugerir o restante do valor se for o primeiro pagamento e o valor atual for 0
+    // Ou se houver mais de um pagamento e a soma deles não exceder o total
+    if (
+      payments.length === 1 &&
+      parseCurrency(payment.valorPago) === 0 &&
+      total > 0
+    ) {
+      defaultPaymentValue = total;
+    } else if (
+      payments.length > 1 &&
+      parseCurrency(payment.valorPago) === 0 &&
+      remaining > 0
+    ) {
+      // Para o último pagamento sugerir o restante
+      const totalOthers = payments
+        .filter((_, i) => i !== index)
+        .reduce((sum, p) => sum + parseCurrency(p.valorPago), 0);
+      if (index === payments.length - 1 || totalOthers < total) {
+        defaultPaymentValue = total - totalOthers;
+        defaultPaymentValue = Math.max(0, defaultPaymentValue);
+      }
+    }
+
+    return (
+      <View style={styles.paymentItemCard}>
+        <View style={styles.paymentItemHeader}>
+          <Text style={styles.paymentItemTitle}>Pagamento #{index + 1}</Text>
+          <TouchableOpacity
+            onPress={() => handleRemovePayment(payment.id)}
+            disabled={payments.length === 1}
+          >
+            <Trash2
+              size={20}
+              color={
+                payments.length === 1
+                  ? theme.colors.foreground
+                  : theme.colors.destructive
+              }
+            />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Forma de Pagamento *</Text>
+          {loadingPayments ? (
+            <ActivityIndicator />
+          ) : (
+            <RNPickerSelect
+              onValueChange={(value) =>
+                handlePaymentChange(payment.id, "formaPagamentoId", value)
+              }
+              items={getPaymentMethodOptions()}
+              placeholder={{ label: "Selecione...", value: 0 }}
+              style={pickerSelectStyles}
+              value={payment.formaPagamentoId}
+            />
+          )}
+        </View>
+
+        {canInstallment && (
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Parcelas</Text>
+            <RNPickerSelect
+              onValueChange={(v) =>
+                handlePaymentChange(payment.id, "parcelas", v)
+              }
+              items={[...Array(12)].map((_, i) => ({
+                label: `${i + 1}x ${
+                  totalPaid > 0
+                    ? `de R$ ${(parseCurrency(payment.valorPago) / (i + 1))
+                        .toFixed(2)
+                        .replace(".", ",")}`
+                    : ""
+                }`,
+                value: i + 1,
+              }))}
+              placeholder={{ label: "1x à vista", value: 1 }}
+              style={pickerSelectStyles}
+              value={payment.parcelas}
+            />
+          </View>
+        )}
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Valor Pago (R$) *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder={formatCurrency(defaultPaymentValue)}
+            value={payment.valorPago.replace(".", ",")} // Exibir com vírgula
+            onChangeText={(text) => handlePaymentValueChange(payment.id, text)}
+            keyboardType="numeric"
+          />
+        </View>
+      </View>
+    );
+  };
+
+  // --- JSX (Renderização da Tela) ---
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -197,10 +497,13 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Cliente */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Cliente</Text>
+          <Text style={styles.cardTitle}>Cliente *</Text>
           {!selectedClient ? (
             <>
               <View style={styles.searchInputContainer}>
@@ -216,7 +519,9 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
                   onChangeText={setClientSearch}
                 />
               </View>
-              {clientSearch.length > 0 && (
+              {loadingClients ? (
+                <ActivityIndicator style={{ marginVertical: 10 }} />
+              ) : clientSearch.length > 0 ? (
                 <View>
                   {filteredClients.map((c) => (
                     <TouchableOpacity
@@ -224,23 +529,23 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
                       style={styles.searchResult}
                       onPress={() => handleSelectClient(c)}
                     >
-                      <Text style={styles.searchResultText}>{c.name}</Text>
+                      <Text style={styles.searchResultText}>{c.nome}</Text>
                       <Text style={styles.searchResultSubtext}>
-                        CPF: {c.cpf}
+                        CPF: {c.cpf || "Não informado"}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
-              )}
+              ) : null}
             </>
           ) : (
             <View style={styles.selectedItemContainer}>
               <View>
                 <Text style={styles.selectedItemText}>
-                  {selectedClient.name}
+                  {selectedClient.nome}
                 </Text>
                 <Text style={styles.selectedItemSubtext}>
-                  CPF: {selectedClient.cpf}
+                  CPF: {selectedClient.cpf || "Não informado"}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setSelectedClient(null)}>
@@ -253,7 +558,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
         {/* Produtos */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Produtos</Text>
+            <Text style={styles.cardTitle}>Produtos *</Text>
             <TouchableOpacity
               style={styles.addButton}
               onPress={() => setShowProductModal(true)}
@@ -268,9 +573,13 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
             selectedProducts.map((p) => (
               <View key={p.id} style={styles.productItem}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.productName}>{p.name}</Text>
+                  <Text style={styles.productName}>{p.nome}</Text>
                   <Text style={styles.productDetails}>
-                    R$ {p.price.toFixed(2)} x {p.quantity}
+                    R${" "}
+                    {(parseFloat(String(p.valorVenda)) || 0)
+                      .toFixed(2)
+                      .replace(".", ",")}{" "}
+                    x s{p.quantity}
                   </Text>
                 </View>
                 <View style={styles.quantityControl}>
@@ -301,33 +610,23 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
         {/* Pagamento */}
         {selectedProducts.length > 0 && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Pagamento</Text>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Forma de Pagamento *</Text>
-              <RNPickerSelect
-                onValueChange={setPaymentMethod}
-                items={mockPaymentMethods.map((pm) => ({
-                  label: pm.description,
-                  value: pm.id,
-                }))}
-                placeholder={{ label: "Selecione...", value: null }}
-                style={pickerSelectStyles}
-              />
-            </View>
-            {canInstallment && (
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Parcelas</Text>
-                <RNPickerSelect
-                  onValueChange={(v) => setInstallments(v)}
-                  items={[...Array(12)].map((_, i) => ({
-                    label: `${i + 1}x de R$ ${(total / (i + 1)).toFixed(2)}`,
-                    value: i + 1,
-                  }))}
-                  placeholder={{}}
-                  style={pickerSelectStyles}
-                />
-              </View>
-            )}
+            <Text style={styles.cardTitle}>Pagamento *</Text>
+
+            {payments.map((p, index) => (
+              <PaymentInput key={p.id} payment={p} index={index} />
+            ))}
+
+            <TouchableOpacity
+              style={styles.linkButton}
+              onPress={handleAddPayment}
+            >
+              <Text
+                style={[styles.linkButtonText, { color: theme.colors.accent }]}
+              >
+                + Adicionar forma de pagamento
+              </Text>
+            </TouchableOpacity>
+
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Desconto (R$)</Text>
               <TextInput
@@ -347,7 +646,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
             <Text style={styles.cardTitle}>Resumo da Venda</Text>
             <View style={styles.summaryRow}>
               <Text>Subtotal</Text>
-              <Text>R$ {subtotal.toFixed(2)}</Text>
+              <Text>R$ {formatCurrency(subtotal)}</Text>
             </View>
             {getDiscountValue() > 0 && (
               <View style={styles.summaryRow}>
@@ -355,7 +654,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
                   Desconto
                 </Text>
                 <Text style={{ color: theme.colors.destructive }}>
-                  - R$ {getDiscountValue().toFixed(2)}
+                  - R$ {formatCurrency(getDiscountValue())}
                 </Text>
               </View>
             )}
@@ -371,7 +670,31 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
               ]}
             >
               <Text style={styles.totalText}>Total</Text>
-              <Text style={styles.totalText}>R$ {total.toFixed(2)}</Text>
+              <Text style={styles.totalText}>R$ {formatCurrency(total)}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.totalText}>Total Pago</Text>
+              <Text style={styles.totalText}>
+                R$ {formatCurrency(totalPaid)}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.totalText}>Restante</Text>
+              <Text
+                style={[
+                  styles.totalText,
+                  {
+                    color:
+                      remaining > 0.01
+                        ? theme.colors.destructive
+                        : remaining < -0.01
+                        ? "green"
+                        : theme.colors.primary,
+                  },
+                ]}
+              >
+                R$ {formatCurrency(remaining)}
+              </Text>
             </View>
           </View>
         )}
@@ -383,16 +706,22 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
           <TouchableOpacity
             style={[
               styles.finalizeButton,
-              (!selectedClient || !paymentMethod) &&
+              (loading || !selectedClient || Math.abs(remaining) > 0.01) &&
                 styles.finalizeButtonDisabled,
             ]}
             onPress={handleFinalizeSale}
-            disabled={!selectedClient || !paymentMethod}
+            disabled={loading || !selectedClient || Math.abs(remaining) > 0.01}
           >
-            <Check size={20} color="white" />
-            <Text style={styles.finalizeButtonText}>
-              Finalizar Venda - R$ {total.toFixed(2)}
-            </Text>
+            {loading ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <>
+                <Check size={20} color="white" />
+                <Text style={styles.finalizeButtonText}>
+                  Finalizar Venda - R$ {formatCurrency(total)}
+                </Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -421,23 +750,33 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
               />
             </View>
             <ScrollView>
-              {filteredProducts.map((p) => (
-                <View key={p.id} style={styles.modalProductItem}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.productName}>{p.name}</Text>
-                    <Text style={styles.productDetails}>
-                      R$ {p.price.toFixed(2)} | Estoque: {p.stock}
-                    </Text>
+              {loadingProducts ? (
+                <ActivityIndicator style={{ marginVertical: 10 }} />
+              ) : (
+                filteredProducts.map((p) => (
+                  <View key={p.id} style={styles.modalProductItem}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.productName}>{p.nome}</Text>
+                      <Text style={styles.productDetails}>
+                        R${" "}
+                        {(parseFloat(String(p.valorVenda)) || 0)
+                          .toFixed(2)
+                          .replace(".", ",")}{" "}
+                        |
+                        {/* R$ {(parseFloat(String(p.valorVenda)) || 0).toFixed(2).replace(".", ",")} x{" "}s */}
+                        Estoque: {p.estoque}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.addButton}
+                      onPress={() => handleAddProduct(p)}
+                    >
+                      <Plus size={16} color="white" />
+                      <Text style={styles.addButtonText}>Adicionar</Text>
+                    </TouchableOpacity>
                   </View>
-                  <TouchableOpacity
-                    style={styles.addButton}
-                    onPress={() => handleAddProduct(p)}
-                  >
-                    <Plus size={16} color="white" />
-                    <Text style={styles.addButtonText}>Adicionar</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
+                ))
+              )}
             </ScrollView>
             <TouchableOpacity
               style={styles.closeButton}
@@ -637,6 +976,37 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     color: theme.colors.primary,
+  },
+  // --- NOVOS ESTILOS PARA PAGAMENTO ---
+  paymentItemCard: {
+    backgroundColor: theme.colors.inputBackground,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  paymentItemHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  paymentItemTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: theme.colors.primary,
+  },
+  linkButton: {
+    // <-- NOVO ESTILO
+    alignSelf: "flex-start",
+    marginBottom: 16,
+    paddingVertical: 4,
+  },
+  linkButtonText: {
+    // <-- NOVO ESTILO
+    fontSize: 16,
+    fontWeight: "500",
   },
 });
 
