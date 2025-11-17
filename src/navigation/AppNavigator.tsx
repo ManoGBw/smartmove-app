@@ -8,6 +8,7 @@ import { CadastroFormaPagamento } from "../screens/CadastroFormaPagamento";
 import { CadastroProduto } from "../screens/CadastroProduto";
 import { CadastrosMenu } from "../screens/CadastrosMenu";
 import { Dashboard } from "../screens/Dashboard";
+import { EstoqueScreen } from "../screens/EstoqueScreen";
 import { ForgotPasswordScreen } from "../screens/ForgotPassword";
 import { LoginScreen } from "../screens/LoginScreen";
 import { OrcamentoScreen } from "../screens/OrcamentoScreen";
@@ -37,6 +38,7 @@ const AppRoutes = () => (
     />
     <AppStack.Screen name="RealizarVenda" component={RealizarVenda} />
     <AppStack.Screen name="OrcamentoScreen" component={OrcamentoScreen} />
+    <AppStack.Screen name="EstoqueScreen" component={EstoqueScreen} />
   </AppStack.Navigator>
 );
 

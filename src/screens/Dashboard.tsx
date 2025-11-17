@@ -92,6 +92,8 @@ export function Dashboard({ navigation }: DashboardProps) {
       navigation.navigate("RealizarVenda");
     } else if (screenId === "orcamento") {
       navigation.navigate("OrcamentoScreen");
+    } else if (screenId === "estoque") {
+      navigation.navigate("EstoqueScreen");
     } else {
       // Para os outros botões que ainda não têm tela
       Alert.alert(
