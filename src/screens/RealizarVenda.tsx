@@ -14,7 +14,9 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -89,7 +91,10 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
   const [loadingClients, setLoadingClients] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [loadingPayments, setLoadingPayments] = useState(false);
-  // --- FIM DOS NOVOS ESTADOS ---
+
+  // --- ESTADO DE FOCO PARA CONTROLAR O SCROLL ---
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  // ----------------------------------------------------
 
   // --- FUNÇÕES DE BUSCA DE DADOS NA API ---
   const fetchClients = useCallback(async () => {
@@ -206,6 +211,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
   // Funções de Cálculo
   const parseCurrency = (value: string): number => {
     if (!value) return 0;
+    // Remove o separador de milhar e troca a vírgula por ponto
     const numberString = value.replace(/\./g, "").replace(",", ".");
     return parseFloat(numberString) || 0;
   };
@@ -248,6 +254,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
     setPayments((prev) => prev.filter((p) => p.id !== id));
   };
 
+  // Função central para alterar o estado do pagamento (exceto valor do TextInput, que usa local)
   const handlePaymentChange = (
     id: string,
     field: keyof SalePayment,
@@ -256,21 +263,6 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
     setPayments((prev) =>
       prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
     );
-  };
-
-  const handlePaymentValueChange = (id: string, value: string) => {
-    const numericValue = parseCurrency(value);
-
-    // Distribui o valor restante para o pagamento atual se for o primeiro pagamento
-    if (payments.length === 1) {
-      handlePaymentChange(
-        id,
-        "valorPago",
-        formatCurrency(Math.min(numericValue, total))
-      );
-    } else {
-      handlePaymentChange(id, "valorPago", formatCurrency(numericValue));
-    }
   };
 
   const handleFinalizeSale = async () => {
@@ -299,11 +291,11 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
       // Tolerância de 1 centavo para floating point
       Alert.alert(
         "Atenção",
-        `O valor pago (R$ ${totalPaid.toFixed(
-          2
-        )}) não corresponde ao total (R$ ${total.toFixed(
-          2
-        )}). Restante: R$ ${remaining.toFixed(2)}.`
+        `O valor pago (R$ ${formatCurrency(
+          totalPaid
+        )}) não corresponde ao total (R$ ${formatCurrency(
+          total
+        )}). Restante: R$ ${formatCurrency(remaining)}.`
       );
       return;
     }
@@ -346,7 +338,8 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
       Toast.show({ type: "success", text1: "Venda finalizada com sucesso!" });
       setTimeout(() => navigation.goBack(), 1500);
     } catch (error: any) {
-      console.error("Erro ao finalizar venda:", error);
+      // Adicionado log de erro para facilitar a análise de um crash
+      console.error("CRASH DEBUG: Erro ao finalizar venda:", error);
       Alert.alert(
         "Erro na Venda",
         error.message || "Ocorreu um erro inesperado ao salvar a venda."
@@ -363,7 +356,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
       aceitaParcelamento: pm.aceitaParcelamento,
     }));
 
-  // Componente de Pagamento Individual (para renderizar na lista de payments)
+  // Componente de Pagamento Individual (Refatorado para estado local de input)
   const PaymentInput = ({
     payment,
     index,
@@ -371,39 +364,88 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
     payment: SalePayment;
     index: number;
   }) => {
+    // ESTADO LOCAL para gerenciar a digitação
+    const [localValue, setLocalValue] = useState(
+      payment.valorPago.replace(".", ",")
+    );
+
+    // Sincronizar localValue com o valor formatado do estado pai APÓS O BLUR/APÓS ATUALIZAÇÃO DO PAI
+    useEffect(() => {
+      const formattedParentValue = payment.valorPago.replace(".", ",");
+
+      // A sincronização ocorre se o campo não estiver focado E o valor for diferente.
+      if (!isInputFocused && localValue !== formattedParentValue) {
+        setLocalValue(formattedParentValue);
+      }
+    }, [payment.valorPago, isInputFocused]); // localValue REMOVIDO do dep array.
+
+    // --- FUNÇÃO handleLocalValueChange ---
+    const handleLocalValueChange = (text: string) => {
+      // Permite apenas números e a vírgula para a digitação.
+      const cleanedText = text.replace(/[^0-9,]/g, "");
+      setLocalValue(cleanedText);
+      // Não atualiza o estado 'payments' aqui!
+    };
+
+    // --- LÓGICA DE FOCO E BLUR ---
+    const handleFocus = () => {
+      console.log(`[LOG DEBUG] FOCUS: ID ${payment.id}`);
+
+      // CORREÇÃO FINAL: Deferir a atualização de estado global E a limpeza do valor
+      // para o próximo ciclo de evento. Isso permite que o teclado nativo abra
+      // completamente antes que o React forçe a re-renderização ou o bloqueio do scroll.
+      setTimeout(() => {
+        setIsInputFocused(true);
+
+        // Remove a formatação ao entrar no campo para facilitar a digitação
+        const rawValue = payment.valorPago.replace(/[^0-9,]/g, "");
+        setLocalValue(rawValue);
+      }, 0);
+    };
+
+    const handleBlur = () => {
+      console.log(
+        `[LOG DEBUG] BLUR: ID ${payment.id}, Valor digitado: ${localValue}`
+      );
+
+      // Deferir a atualização de estado global para que o scroll volte a funcionar no próximo ciclo
+      setTimeout(() => setIsInputFocused(false), 0);
+
+      // 1. Processamento e sanitização do valor local
+      let cleanValue = localValue.replace(/[^0-9,]/g, "");
+      const numericValue = parseCurrency(cleanValue);
+      let finalValue = numericValue;
+
+      // 2. Lógica de limite/sugestão
+      if (payments.length === 1) {
+        finalValue = Math.min(numericValue, total);
+      }
+
+      // 3. Atualiza o estado principal (do componente RealizarVenda) com o valor formatado
+      handlePaymentChange(
+        payment.id,
+        "valorPago",
+        formatCurrency(finalValue) // Envia o valor formatado ao pai
+      );
+    };
+    // ----------------------------
+
     const selectedMethod = allPaymentMethods.find(
       (pm) => pm.id === payment.formaPagamentoId
     );
     const canInstallment = selectedMethod?.aceitaParcelamento || false;
 
-    // Calcular o valor padrão a ser sugerido
-    let defaultPaymentValue =
-      remaining > 0
-        ? remaining + parseCurrency(payment.valorPago)
-        : parseCurrency(payment.valorPago);
-    defaultPaymentValue = Math.max(0, defaultPaymentValue);
+    // Lógica de sugestão de valor (para placeholder)
+    let defaultPaymentValue = parseCurrency(payment.valorPago);
 
-    // Sugerir o restante do valor se for o primeiro pagamento e o valor atual for 0
-    // Ou se houver mais de um pagamento e a soma deles não exceder o total
-    if (
-      payments.length === 1 &&
-      parseCurrency(payment.valorPago) === 0 &&
-      total > 0
-    ) {
+    if (payments.length === 1 && total > 0) {
       defaultPaymentValue = total;
-    } else if (
-      payments.length > 1 &&
-      parseCurrency(payment.valorPago) === 0 &&
-      remaining > 0
-    ) {
-      // Para o último pagamento sugerir o restante
+    } else if (payments.length > 1 && parseCurrency(payment.valorPago) === 0) {
       const totalOthers = payments
-        .filter((_, i) => i !== index)
+        .filter((p, i) => i !== index)
         .reduce((sum, p) => sum + parseCurrency(p.valorPago), 0);
-      if (index === payments.length - 1 || totalOthers < total) {
-        defaultPaymentValue = total - totalOthers;
-        defaultPaymentValue = Math.max(0, defaultPaymentValue);
-      }
+      const remainingForSuggestion = total - totalOthers;
+      defaultPaymentValue = Math.max(0, remainingForSuggestion);
     }
 
     return (
@@ -451,7 +493,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
               }
               items={[...Array(12)].map((_, i) => ({
                 label: `${i + 1}x ${
-                  totalPaid > 0
+                  parseCurrency(payment.valorPago) > 0
                     ? `de R$ ${(parseCurrency(payment.valorPago) / (i + 1))
                         .toFixed(2)
                         .replace(".", ",")}`
@@ -471,9 +513,11 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
           <TextInput
             style={styles.input}
             placeholder={formatCurrency(defaultPaymentValue)}
-            value={payment.valorPago.replace(".", ",")} // Exibir com vírgula
-            onChangeText={(text) => handlePaymentValueChange(payment.id, text)}
+            value={localValue}
+            onChangeText={handleLocalValueChange}
             keyboardType="numeric"
+            onFocus={handleFocus}
+            onBlur={handleBlur}
           />
         </View>
       </View>
@@ -497,234 +541,249 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
         </View>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        keyboardShouldPersistTaps="handled"
+      {/* CONTAINER PRINCIPAL: KeyboardAvoidingView */}
+      <KeyboardAvoidingView
+        style={styles.contentContainer}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        {/* Cliente */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Cliente *</Text>
-          {!selectedClient ? (
-            <>
-              <View style={styles.searchInputContainer}>
-                <Search
-                  size={20}
-                  color={theme.colors.foreground}
-                  style={styles.searchIcon}
-                />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Buscar cliente por nome ou CPF..."
-                  value={clientSearch}
-                  onChangeText={setClientSearch}
-                />
-              </View>
-              {loadingClients ? (
-                <ActivityIndicator style={{ marginVertical: 10 }} />
-              ) : clientSearch.length > 0 ? (
-                <View>
-                  {filteredClients.map((c) => (
-                    <TouchableOpacity
-                      key={c.id}
-                      style={styles.searchResult}
-                      onPress={() => handleSelectClient(c)}
-                    >
-                      <Text style={styles.searchResultText}>{c.nome}</Text>
-                      <Text style={styles.searchResultSubtext}>
-                        CPF: {c.cpf || "Não informado"}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          keyboardShouldPersistTaps="handled"
+          // --- SCROLL CONTROLADO PARA EVITAR ROUBO DE FOCO ---
+          scrollEnabled={!isInputFocused}
+          // --------------------------------------------------
+        >
+          {/* Cliente */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Cliente *</Text>
+            {!selectedClient ? (
+              <>
+                <View style={styles.searchInputContainer}>
+                  <Search
+                    size={20}
+                    color={theme.colors.foreground}
+                    style={styles.searchIcon}
+                  />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Buscar cliente por nome ou CPF..."
+                    value={clientSearch}
+                    onChangeText={setClientSearch}
+                  />
                 </View>
-              ) : null}
-            </>
-          ) : (
-            <View style={styles.selectedItemContainer}>
-              <View>
-                <Text style={styles.selectedItemText}>
-                  {selectedClient.nome}
-                </Text>
-                <Text style={styles.selectedItemSubtext}>
-                  CPF: {selectedClient.cpf || "Não informado"}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setSelectedClient(null)}>
-                <X size={20} color={theme.colors.destructive} />
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
-        {/* Produtos */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Produtos *</Text>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => setShowProductModal(true)}
-            >
-              <Plus size={16} color="white" />
-              <Text style={styles.addButtonText}>Adicionar</Text>
-            </TouchableOpacity>
-          </View>
-          {selectedProducts.length === 0 ? (
-            <Text style={styles.emptyText}>Nenhum produto adicionado.</Text>
-          ) : (
-            selectedProducts.map((p) => (
-              <View key={p.id} style={styles.productItem}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.productName}>{p.nome}</Text>
-                  <Text style={styles.productDetails}>
-                    R${" "}
-                    {(parseFloat(String(p.valorVenda)) || 0)
-                      .toFixed(2)
-                      .replace(".", ",")}{" "}
-                    x s{p.quantity}
+                {loadingClients ? (
+                  <ActivityIndicator style={{ marginVertical: 10 }} />
+                ) : clientSearch.length > 0 ? (
+                  <View>
+                    {filteredClients.map((c) => (
+                      <TouchableOpacity
+                        key={c.id}
+                        style={styles.searchResult}
+                        onPress={() => handleSelectClient(c)}
+                      >
+                        <Text style={styles.searchResultText}>{c.nome}</Text>
+                        <Text style={styles.searchResultSubtext}>
+                          CPF: {c.cpf || "Não informado"}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
+              </>
+            ) : (
+              <View style={styles.selectedItemContainer}>
+                <View>
+                  <Text style={styles.selectedItemText}>
+                    {selectedClient.nome}
+                  </Text>
+                  <Text style={styles.selectedItemSubtext}>
+                    CPF: {selectedClient.cpf || "Não informado"}
                   </Text>
                 </View>
-                <View style={styles.quantityControl}>
-                  <TouchableOpacity
-                    onPress={() =>
-                      handleUpdateQuantity(p.id, (p.quantity || 1) - 1)
-                    }
-                  >
-                    <Minus size={18} color={theme.colors.primary} />
-                  </TouchableOpacity>
-                  <Text style={styles.quantityText}>{p.quantity}</Text>
-                  <TouchableOpacity
-                    onPress={() =>
-                      handleUpdateQuantity(p.id, (p.quantity || 1) + 1)
-                    }
-                  >
-                    <Plus size={18} color={theme.colors.primary} />
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity onPress={() => handleRemoveProduct(p.id)}>
-                  <Trash2 size={20} color={theme.colors.destructive} />
+                <TouchableOpacity onPress={() => setSelectedClient(null)}>
+                  <X size={20} color={theme.colors.destructive} />
                 </TouchableOpacity>
               </View>
-            ))
-          )}
-        </View>
-
-        {/* Pagamento */}
-        {selectedProducts.length > 0 && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Pagamento *</Text>
-
-            {payments.map((p, index) => (
-              <PaymentInput key={p.id} payment={p} index={index} />
-            ))}
-
-            <TouchableOpacity
-              style={styles.linkButton}
-              onPress={handleAddPayment}
-            >
-              <Text
-                style={[styles.linkButtonText, { color: theme.colors.accent }]}
-              >
-                + Adicionar forma de pagamento
-              </Text>
-            </TouchableOpacity>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Desconto (R$)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="0,00"
-                value={discount}
-                onChangeText={setDiscount}
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
-        )}
-
-        {/* Resumo */}
-        {selectedProducts.length > 0 && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Resumo da Venda</Text>
-            <View style={styles.summaryRow}>
-              <Text>Subtotal</Text>
-              <Text>R$ {formatCurrency(subtotal)}</Text>
-            </View>
-            {getDiscountValue() > 0 && (
-              <View style={styles.summaryRow}>
-                <Text style={{ color: theme.colors.destructive }}>
-                  Desconto
-                </Text>
-                <Text style={{ color: theme.colors.destructive }}>
-                  - R$ {formatCurrency(getDiscountValue())}
-                </Text>
-              </View>
             )}
-            <View
-              style={[
-                styles.summaryRow,
-                {
-                  borderTopWidth: 1,
-                  borderColor: "#eee",
-                  paddingTop: 10,
-                  marginTop: 10,
-                },
-              ]}
-            >
-              <Text style={styles.totalText}>Total</Text>
-              <Text style={styles.totalText}>R$ {formatCurrency(total)}</Text>
+          </View>
+
+          {/* Produtos */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Produtos *</Text>
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => setShowProductModal(true)}
+              >
+                <Plus size={16} color="white" />
+                <Text style={styles.addButtonText}>Adicionar</Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.totalText}>Total Pago</Text>
-              <Text style={styles.totalText}>
-                R$ {formatCurrency(totalPaid)}
-              </Text>
+            {selectedProducts.length === 0 ? (
+              <Text style={styles.emptyText}>Nenhum produto adicionado.</Text>
+            ) : (
+              selectedProducts.map((p) => (
+                <View key={p.id} style={styles.productItem}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.productName}>{p.nome}</Text>
+                    <Text style={styles.productDetails}>
+                      R${" "}
+                      {(parseFloat(String(p.valorVenda)) || 0)
+                        .toFixed(2)
+                        .replace(".", ",")}{" "}
+                      x {p.quantity}
+                    </Text>
+                  </View>
+                  <View style={styles.quantityControl}>
+                    <TouchableOpacity
+                      onPress={() =>
+                        handleUpdateQuantity(p.id, (p.quantity || 1) - 1)
+                      }
+                    >
+                      <Minus size={18} color={theme.colors.primary} />
+                    </TouchableOpacity>
+                    <Text style={styles.quantityText}>{p.quantity}</Text>
+                    <TouchableOpacity
+                      onPress={() =>
+                        handleUpdateQuantity(p.id, (p.quantity || 1) + 1)
+                      }
+                    >
+                      <Plus size={18} color={theme.colors.primary} />
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity onPress={() => handleRemoveProduct(p.id)}>
+                    <Trash2 size={20} color={theme.colors.destructive} />
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </View>
+
+          {/* Pagamento */}
+          {selectedProducts.length > 0 && (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Pagamento *</Text>
+
+              {payments.map((p, index) => (
+                <PaymentInput key={p.id} payment={p} index={index} />
+              ))}
+
+              <TouchableOpacity
+                style={styles.linkButton}
+                onPress={handleAddPayment}
+              >
+                <Text
+                  style={[
+                    styles.linkButtonText,
+                    { color: theme.colors.accent },
+                  ]}
+                >
+                  + Adicionar forma de pagamento
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Desconto (R$)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0,00"
+                  value={discount}
+                  onChangeText={setDiscount}
+                  keyboardType="numeric"
+                />
+              </View>
             </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.totalText}>Restante</Text>
-              <Text
+          )}
+
+          {/* Resumo */}
+          {selectedProducts.length > 0 && (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Resumo da Venda</Text>
+              <View style={styles.summaryRow}>
+                <Text>Subtotal</Text>
+                <Text>R$ {formatCurrency(subtotal)}</Text>
+              </View>
+              {getDiscountValue() > 0 && (
+                <View style={styles.summaryRow}>
+                  <Text style={{ color: theme.colors.destructive }}>
+                    Desconto
+                  </Text>
+                  <Text style={{ color: theme.colors.destructive }}>
+                    - R$ {formatCurrency(getDiscountValue())}
+                  </Text>
+                </View>
+              )}
+              <View
                 style={[
-                  styles.totalText,
+                  styles.summaryRow,
                   {
-                    color:
-                      remaining > 0.01
-                        ? theme.colors.destructive
-                        : remaining < -0.01
-                        ? "green"
-                        : theme.colors.primary,
+                    borderTopWidth: 1,
+                    borderColor: "#eee",
+                    paddingTop: 10,
+                    marginTop: 10,
                   },
                 ]}
               >
-                R$ {formatCurrency(remaining)}
-              </Text>
+                <Text style={styles.totalText}>Total</Text>
+                <Text style={styles.totalText}>R$ {formatCurrency(total)}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.totalText}>Total Pago</Text>
+                <Text style={styles.totalText}>
+                  R$ {formatCurrency(totalPaid)}
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.totalText}>Restante</Text>
+                <Text
+                  style={[
+                    styles.totalText,
+                    {
+                      color:
+                        remaining > 0.01
+                          ? theme.colors.destructive
+                          : remaining < -0.01
+                          ? "green"
+                          : theme.colors.primary,
+                    },
+                  ]}
+                >
+                  R$ {formatCurrency(remaining)}
+                </Text>
+              </View>
             </View>
+          )}
+        </ScrollView>
+
+        {/* Rodapé Fixo (dentro do KeyboardAvoidingView) */}
+        {selectedProducts.length > 0 && (
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[
+                styles.finalizeButton,
+                (loading || !selectedClient || Math.abs(remaining) > 0.01) &&
+                  styles.finalizeButtonDisabled,
+              ]}
+              onPress={handleFinalizeSale}
+              disabled={
+                loading || !selectedClient || Math.abs(remaining) > 0.01
+              }
+            >
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <>
+                  <Check size={20} color="white" />
+                  <Text style={styles.finalizeButtonText}>
+                    Finalizar Venda - R$ {formatCurrency(total)}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
         )}
-      </ScrollView>
-
-      {/* Rodapé Fixo */}
-      {selectedProducts.length > 0 && (
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={[
-              styles.finalizeButton,
-              (loading || !selectedClient || Math.abs(remaining) > 0.01) &&
-                styles.finalizeButtonDisabled,
-            ]}
-            onPress={handleFinalizeSale}
-            disabled={loading || !selectedClient || Math.abs(remaining) > 0.01}
-          >
-            {loading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <>
-                <Check size={20} color="white" />
-                <Text style={styles.finalizeButtonText}>
-                  Finalizar Venda - R$ {formatCurrency(total)}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
+      </KeyboardAvoidingView>
+      {/* FIM DO CONTAINER PRINCIPAL */}
 
       {/* Modal de Produtos */}
       <Modal
@@ -762,9 +821,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
                         {(parseFloat(String(p.valorVenda)) || 0)
                           .toFixed(2)
                           .replace(".", ",")}{" "}
-                        |
-                        {/* R$ {(parseFloat(String(p.valorVenda)) || 0).toFixed(2).replace(".", ",")} x{" "}s */}
-                        Estoque: {p.estoque}
+                        | Estoque: {p.estoque}
                       </Text>
                     </View>
                     <TouchableOpacity
@@ -794,6 +851,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
 // --- Estilos ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
+  contentContainer: { flex: 1 }, // Estilo mantido
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -808,7 +866,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
   },
-  scrollContainer: { padding: 16, paddingBottom: 100 },
+  scrollContainer: { padding: 16, paddingBottom: 16 }, // Padding ajustado para o footer
   card: {
     backgroundColor: "white",
     borderRadius: 12,
@@ -918,10 +976,6 @@ const styles = StyleSheet.create({
   },
   totalText: { fontSize: 18, fontWeight: "bold", color: theme.colors.primary },
   footer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
     backgroundColor: "white",
     borderTopWidth: 1,
     borderTopColor: "#E8E8EB",
@@ -998,13 +1052,11 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
   },
   linkButton: {
-    // <-- NOVO ESTILO
     alignSelf: "flex-start",
     marginBottom: 16,
     paddingVertical: 4,
   },
   linkButtonText: {
-    // <-- NOVO ESTILO
     fontSize: 16,
     fontWeight: "500",
   },

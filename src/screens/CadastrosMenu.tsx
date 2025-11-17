@@ -2,12 +2,12 @@ import { ArrowLeft, CreditCard, Package, Users } from "lucide-react-native";
 import React from "react";
 import {
   Alert,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { theme } from "../theme/colors";
 
 type CadastrosMenuProps = {

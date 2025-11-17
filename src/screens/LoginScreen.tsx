@@ -4,17 +4,16 @@ import {
   ActivityIndicator, // Importe o ActivityIndicator para o loading
   Alert,
   Image,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { useAuth } from "../context/AuthContext"; // 1. IMPORTE O HOOK MÁGICO
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
 
-// A tipagem das props continua a mesma
 type LoginScreenProps = {
   navigation: {
     navigate: (screen: string) => void;
@@ -22,16 +21,13 @@ type LoginScreenProps = {
 };
 
 export function LoginScreen({ navigation }: LoginScreenProps) {
-  // 2. PEGUE A FUNÇÃO 'login' DO NOSSO CONTEXTO DE AUTENTICAÇÃO
   const { login } = useAuth();
 
-  // Os estados para os campos e para o loading continuam aqui
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // 3. A FUNÇÃO handleLogin AGORA É MUITO MAIS SIMPLES
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Atenção", "Por favor, preencha o e-mail e a senha.");

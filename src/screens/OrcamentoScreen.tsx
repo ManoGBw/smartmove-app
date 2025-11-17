@@ -15,7 +15,6 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,6 +22,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import { theme } from "../theme/colors";
 
@@ -519,7 +519,6 @@ export function OrcamentoScreen({ navigation }: OrcamentoScreenProps) {
                   <View key={p.id} style={styles.modalProductItem}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.productName}>{p.nome}</Text>
-                      {/* 4. CORREÇÃO AQUI (A QUE ESTÁ NA SUA IMAGEM) */}
                       <Text style={styles.productDetails}>
                         R$ {(parseFloat(String(p.valorVenda)) || 0).toFixed(2)}{" "}
                         | Estoque: {p.estoque}
