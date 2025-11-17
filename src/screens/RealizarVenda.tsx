@@ -30,6 +30,9 @@ import Toast from "react-native-toast-message";
 import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
 
+import * as Print from "expo-print"; // <--- ADICIONADO
+import * as Sharing from "expo-sharing"; // <--- ADICIONADO
+
 const API_URL = "http://72.60.12.191:3006/api/v1";
 
 // --- NOVAS E ATUALIZADAS INTERFACES ---
@@ -216,7 +219,8 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
     return parseFloat(numberString) || 0;
   };
   const formatCurrency = (value: number): string =>
-    value.toFixed(2).replace(".", ",");
+    (parseFloat(String(value)) || 0).toFixed(2).replace(".", ",");
+
   const getDiscountValue = () => parseCurrency(discount);
 
   const subtotal = selectedProducts.reduce(
@@ -264,6 +268,195 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
       prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
     );
   };
+
+  const getPaymentMethodOptions = () =>
+    allPaymentMethods.map((pm) => ({
+      label: pm.nome,
+      value: pm.id,
+      aceitaParcelamento: pm.aceitaParcelamento,
+    }));
+
+  const getPaymentName = (id: number) => {
+    const method = allPaymentMethods.find((pm) => pm.id === id);
+    return method ? method.nome : "Desconhecida";
+  };
+
+  // --- FUNÇÃO PARA GERAR HTML DO PDF (ADAPTADA DO ORÇAMENTO) ---
+  const createHtmlForSalePdf = (
+    client: Client,
+    products: Product[],
+    payments: SalePayment[],
+    discount: number,
+    subtotal: number,
+    totalValue: number,
+    totalPaid: number,
+    remaining: number
+  ) => {
+    const productRows = products
+      .map(
+        (p) => `
+    <tr>
+      <td>${p.nome}</td>
+      <td>${p.quantity}</td>
+      <td>R$ ${formatCurrency(p.valorVenda)}</td>
+      <td>R$ ${formatCurrency(p.valorVenda * (p.quantity || 1))}</td>
+    </tr>
+  `
+      )
+      .join("");
+
+    const paymentRows = payments
+      .map(
+        (p) => `
+    <tr>
+      <td>${getPaymentName(p.formaPagamentoId)}</td>
+      <td>${p.parcelas}x</td>
+      <td>R$ ${formatCurrency(parseCurrency(p.valorPago))}</td>
+    </tr>
+  `
+      )
+      .join("");
+
+    return `
+    <html>
+      <head>
+        <style>
+          body { font-family: sans-serif; padding: 20px; }
+          h1 { color: ${theme.colors.primary}; }
+          h2 { color: ${
+            theme.colors.secondary
+          }; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+          h3 { color: #333; }
+          p { color: #555; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 20px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: ${theme.colors.muted}; color: ${
+      theme.colors.primary
+    }; }
+          .summary { margin-top: 10px; font-size: 1.1em; }
+          .summary-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+          .total { font-weight: bold; color: ${theme.colors.primary}; }
+        </style>
+      </head>
+      <body>
+        <h1>Smart Move Vendas</h1>
+        <h2>Comprovante de Venda</h2>
+
+        <h3>Cliente:</h3>
+        <p>
+          <strong>Nome:</strong> ${client.nome}<br/>
+          <strong>CPF:</strong> ${client.cpf || "Não informado"}<br/>
+          <strong>Telefone:</strong> ${client.telefone || "Não informado"}
+        </p>
+
+        <h3>Itens Vendidos:</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Produto</th>
+              <th>Qtd.</th>
+              <th>Valor Unit.</th>
+              <th>Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${productRows}
+          </tbody>
+        </table>
+
+        <h3>Pagamentos:</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Forma de Pagamento</th>
+              <th>Parcelas</th>
+              <th>Valor Pago</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${paymentRows}
+          </tbody>
+        </table>
+
+        <h3>Resumo:</h3>
+        <div class="summary">
+          <div class="summary-row"><span>Subtotal:</span><span>R$ ${formatCurrency(
+            subtotal
+          )}</span></div>
+          <div class="summary-row" style="color: ${
+            theme.colors.destructive
+          }"><span>Desconto:</span><span>- R$ ${formatCurrency(
+      discount
+    )}</span></div>
+          <div class="summary-row total" style="border-top: 1px solid #ddd; padding-top: 5px; margin-top: 5px;"><span>Total da Venda:</span><span>R$ ${formatCurrency(
+            totalValue
+          )}</span></div>
+          <div class="summary-row total"><span>Total Pago:</span><span>R$ ${formatCurrency(
+            totalPaid
+          )}</span></div>
+          <div class="summary-row total" style="color: ${
+            remaining > 0.01
+              ? theme.colors.destructive
+              : remaining < -0.01
+              ? "green"
+              : theme.colors.primary
+          }"><span>Restante/Troco:</span><span>R$ ${formatCurrency(
+      remaining
+    )}</span></div>
+        </div>
+      </body>
+    </html>
+  `;
+  };
+
+  // --- FUNÇÃO PARA GERAR PDF E COMPARTILHAR (ADAPTADA DO ORÇAMENTO) ---
+  const handleGeneratePDFAndShare = async (saleDetails: {
+    client: Client;
+    products: Product[];
+    payments: SalePayment[];
+    discount: number;
+    subtotal: number;
+    totalValue: number;
+    totalPaid: number;
+    remaining: number;
+  }) => {
+    if (!(await Sharing.isAvailableAsync())) {
+      Alert.alert(
+        "Erro",
+        "O compartilhamento não está disponível neste dispositivo."
+      );
+      return;
+    }
+
+    try {
+      const htmlContent = createHtmlForSalePdf(
+        saleDetails.client,
+        saleDetails.products,
+        saleDetails.payments,
+        saleDetails.discount,
+        saleDetails.subtotal,
+        saleDetails.totalValue,
+        saleDetails.totalPaid,
+        saleDetails.remaining
+      );
+
+      const { uri } = await Print.printToFileAsync({
+        html: htmlContent,
+        base64: false,
+        margins: { top: 30, right: 20, bottom: 20, left: 20 },
+      });
+
+      await Sharing.shareAsync(uri, {
+        mimeType: "application/pdf",
+        dialogTitle: "Compartilhar Comprovante de Venda",
+        UTI: ".pdf",
+      });
+    } catch (error) {
+      console.error("Erro ao gerar/compartilhar PDF:", error);
+      Alert.alert("Erro", "Não foi possível gerar e compartilhar o PDF.");
+    }
+  };
+  // ------------------------------------------------------------------
 
   const handleFinalizeSale = async () => {
     if (loading) return;
@@ -335,6 +528,19 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
         throw new Error(data.message || "Não foi possível finalizar a venda.");
       }
 
+      // --- CHAMADA DA FUNÇÃO DE PDF E COMPARTILHAMENTO ---
+      await handleGeneratePDFAndShare({
+        client: selectedClient,
+        products: selectedProducts,
+        payments: payments,
+        discount: getDiscountValue(),
+        subtotal: subtotal,
+        totalValue: total,
+        totalPaid: totalPaid,
+        remaining: remaining,
+      });
+      // -----------------------------------------------------
+
       Toast.show({ type: "success", text1: "Venda finalizada com sucesso!" });
       setTimeout(() => navigation.goBack(), 1500);
     } catch (error: any) {
@@ -348,13 +554,6 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
       setLoading(false);
     }
   };
-
-  const getPaymentMethodOptions = () =>
-    allPaymentMethods.map((pm) => ({
-      label: pm.nome,
-      value: pm.id,
-      aceitaParcelamento: pm.aceitaParcelamento,
-    }));
 
   // Componente de Pagamento Individual (Refatorado para estado local de input)
   const PaymentInput = ({
