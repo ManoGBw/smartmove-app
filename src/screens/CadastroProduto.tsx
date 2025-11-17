@@ -1,7 +1,7 @@
 // src/screens/CadastroProduto.tsx
 
 import { ArrowLeft, Package, Save } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -14,24 +14,40 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-// 1. Importar o useAuth
 import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
+
+// Definindo a interface para o produto
+interface ProductData {
+  nome: string;
+  marca: string;
+  referencia: string;
+  valorVenda: number;
+  custo: number;
+  estoque: number;
+  status: string; // "ATIVO" ou "INATIVO"
+}
 
 // 2. Definir a URL da API
 const API_URL = "http://72.60.12.191:3006/api/v1";
 
 type CadastroProdutoProps = {
+  route?: {
+    params?: {
+      productId: number; // ID opcional para modo edição
+    };
+  };
   navigation: {
     goBack: () => void;
   };
 };
 
-export function CadastroProduto({ navigation }: CadastroProdutoProps) {
-  // 3. Obter o token do contexto
+export function CadastroProduto({ navigation, route }: CadastroProdutoProps) {
   const { token } = useAuth();
+  const productId = route?.params?.productId; // Obtém o ID para o modo edição
 
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(!!productId); // Carrega dados se for edição
   const [formData, setFormData] = useState({
     nome: "",
     marca: "",
@@ -41,6 +57,47 @@ export function CadastroProduto({ navigation }: CadastroProdutoProps) {
     estoque: "",
     status: true,
   });
+
+  // --- Lógica de Carregamento de Dados (Modo Edição) ---
+  useEffect(() => {
+    if (!productId) {
+      setInitialLoading(false);
+      return;
+    }
+
+    const fetchProductData = async () => {
+      try {
+        const response = await fetch(`${API_URL}/produtos/${productId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!response.ok) throw new Error("Produto não encontrado.");
+
+        const product: ProductData = await response.json();
+
+        setFormData({
+          nome: product.nome || "",
+          marca: product.marca || "",
+          referencia: product.referencia || "",
+          valor: (parseFloat(String(product.valorVenda)) || 0)
+            .toFixed(2)
+            .replace(".", ","),
+          custo: (parseFloat(String(product.custo)) || 0)
+            .toFixed(2)
+            .replace(".", ","),
+          estoque: String(product.estoque),
+          status: product.status === "ATIVO",
+        });
+      } catch (error: any) {
+        Alert.alert("Erro de Carga", error.message);
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    fetchProductData();
+  }, [productId, token]);
+  // --------------------------------------------------------
 
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -60,10 +117,8 @@ export function CadastroProduto({ navigation }: CadastroProdutoProps) {
     handleInputChange(field, formatted);
   };
 
-  // Esta função é crucial para converter o valor formatado (ex: "1.234,56") em número (ex: 1234.56)
   const parseCurrency = (value: string): number => {
     if (!value) return 0;
-    // Remove o separador de milhar e troca a vírgula por ponto
     const numberString = value.replace(/\./g, "").replace(",", ".");
     return parseFloat(numberString) || 0;
   };
@@ -73,12 +128,12 @@ export function CadastroProduto({ navigation }: CadastroProdutoProps) {
     const custo = parseCurrency(formData.custo);
     if (valor > 0 && custo > 0 && valor > custo) {
       const margem = ((valor - custo) / valor) * 100;
-      return `${margem.toFixed(1)}%`;
+      return `${(parseFloat(String(margem)) || 0).toFixed(1)}%`;
     }
     return "-";
   };
 
-  // 4. Atualizar a função handleSave
+  // --- Função Única de Salvar (POST ou PUT) ---
   const handleSave = async () => {
     // Validação básica
     if (!formData.nome || !formData.valor || !formData.estoque) {
@@ -89,20 +144,28 @@ export function CadastroProduto({ navigation }: CadastroProdutoProps) {
     setLoading(true);
 
     try {
-      // 5. Preparar o corpo da requisição
+      const isEditing = !!productId;
+      const method = isEditing ? "PUT" : "POST";
+      const url = isEditing
+        ? `${API_URL}/produtos/${productId}`
+        : `${API_URL}/produtos`;
+      const successMessage = isEditing
+        ? "Produto atualizado com sucesso."
+        : "Produto cadastrado com sucesso.";
+
+      // 5. Preparar o corpo da requisição (Ajustado para PUT também)
       const bodyPayload = {
         nome: formData.nome,
-        marca: formData.marca || null, // Envia 'null' se a marca estiver vazia
-        valorVenda: parseCurrency(formData.valor), // Converte para número
-        custo: parseCurrency(formData.custo), // Converte para número
-        estoque: parseInt(formData.estoque, 10) || 0, // Converte para número
-        status: formData.status ? "ATIVO" : "INATIVO", // Converte booleano para string
-        // O campo 'referencia' não está no seu exemplo de API, então não o enviamos.
+        marca: formData.marca || null,
+        valorVenda: parseCurrency(formData.valor),
+        custo: parseCurrency(formData.custo),
+        estoque: parseInt(formData.estoque, 10) || 0,
+        status: formData.status ? "ATIVO" : "INATIVO",
       };
 
       // 6. Realizar a chamada fetch
-      const response = await fetch(`${API_URL}/produtos`, {
-        method: "POST",
+      const response = await fetch(url, {
+        method: method,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`, // Adiciona o token de autorização
@@ -113,11 +176,14 @@ export function CadastroProduto({ navigation }: CadastroProdutoProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Não foi possível salvar o produto.");
+        throw new Error(
+          data.message ||
+            `Não foi possível ${isEditing ? "atualizar" : "salvar"} o produto.`
+        );
       }
 
       // 7. Sucesso
-      Alert.alert("Sucesso!", "Produto cadastrado com sucesso.");
+      Alert.alert("Sucesso!", successMessage);
       navigation.goBack();
     } catch (error: any) {
       // 8. Tratamento de erro
@@ -127,6 +193,19 @@ export function CadastroProduto({ navigation }: CadastroProdutoProps) {
       setLoading(false);
     }
   };
+  // ---------------------------------------------
+
+  if (initialLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ActivityIndicator
+          style={{ flex: 1, alignSelf: "center" }}
+          size="large"
+          color={theme.colors.primary}
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -140,7 +219,10 @@ export function CadastroProduto({ navigation }: CadastroProdutoProps) {
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
           <Package size={20} color={theme.colors.primaryForeground} />
-          <Text style={styles.headerTitle}>Cadastro de Produto</Text>
+          <Text style={styles.headerTitle}>
+            {productId ? "Editar Produto" : "Cadastro de Produto"}{" "}
+            {/* Título dinâmico */}
+          </Text>
         </View>
       </View>
 
@@ -210,15 +292,17 @@ export function CadastroProduto({ navigation }: CadastroProdutoProps) {
             </View>
           </View>
 
-          {/* Estoque */}
+          {/* Estoque (Não editável em Edição Completa para forçar o novo fluxo) */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Estoque Inicial *</Text>
+            <Text style={styles.label}>Estoque Inicial</Text>
             <TextInput
               style={styles.input}
               placeholder="0"
               value={formData.estoque}
               onChangeText={(text) => handleInputChange("estoque", text)}
               keyboardType="number-pad"
+              // No modo edição, o estoque é apenas informativo/não alterável
+              editable={!productId}
             />
           </View>
 
@@ -264,7 +348,9 @@ export function CadastroProduto({ navigation }: CadastroProdutoProps) {
           ) : (
             <>
               <Save size={20} color={theme.colors.secondaryForeground} />
-              <Text style={styles.saveButtonText}>Salvar Produto</Text>
+              <Text style={styles.saveButtonText}>
+                {productId ? "Atualizar Produto" : "Salvar Produto"}
+              </Text>
             </>
           )}
         </TouchableOpacity>
@@ -273,7 +359,7 @@ export function CadastroProduto({ navigation }: CadastroProdutoProps) {
   );
 }
 
-// Estilos
+// Estilos (sem alterações)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
   header: {

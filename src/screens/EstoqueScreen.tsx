@@ -1,6 +1,6 @@
 // src/screens/EstoqueScreen.tsx
 
-import { ArrowLeft, Package, Search } from "lucide-react-native";
+import { ArrowLeft, Package, Pencil, Plus, Search } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -33,8 +33,8 @@ interface Product {
 type EstoqueScreenProps = {
   navigation: {
     addListener: (event: string, callback: () => void) => () => void;
-    // addListener(arg0: string, fetchProducts: () => Promise<void>): unknown;
     goBack: () => void;
+    navigate: (screen: string, params?: object) => void; // <--- ADICIONADO navigate
   };
 };
 
@@ -45,8 +45,9 @@ export function EstoqueScreen({ navigation }: EstoqueScreenProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
 
-  // Função de busca de produtos na API
+  // Função de busca de produtos na API (reutilizada)
   const fetchProducts = useCallback(async () => {
+    // ... (função inalterada)
     if (!token) {
       setLoading(false);
       return;
@@ -92,7 +93,7 @@ export function EstoqueScreen({ navigation }: EstoqueScreenProps) {
     return unsubscribe;
   }, [fetchProducts, navigation]);
 
-  // Função para filtrar a lista com base na pesquisa
+  // Função para filtrar a lista com base na pesquisa (reutilizada)
   useEffect(() => {
     const query = searchQuery.toLowerCase();
     const filtered = products.filter(
@@ -104,11 +105,25 @@ export function EstoqueScreen({ navigation }: EstoqueScreenProps) {
     setFilteredProducts(filtered);
   }, [searchQuery, products]);
 
-  // Função para formatar moeda
+  // Função para formatar moeda (reutilizada)
   const formatCurrency = (value: number): string =>
     (parseFloat(String(value)) || 0).toFixed(2).replace(".", ",");
 
-  // Componente de Item da Lista
+  // --- FUNÇÕES DE NAVEGAÇÃO ---
+  const handleEditFullPress = (product: Product) => {
+    // Navega para a tela de CadastroProduto em modo edição
+    navigation.navigate("CadastroProduto", { productId: product.id });
+  };
+
+  const handleAddStockPress = (product: Product) => {
+    navigation.navigate("AjusteEstoque", {
+      productId: product.id,
+      productName: product.nome,
+      currentStock: product.estoque,
+    });
+  };
+  // -----------------------------
+
   const ProductItem = ({ product }: { product: Product }) => (
     <View style={styles.productItem}>
       <View style={styles.productInfo}>
@@ -121,16 +136,31 @@ export function EstoqueScreen({ navigation }: EstoqueScreenProps) {
           {formatCurrency(product.custo)}
         </Text>
       </View>
-      <View style={styles.productStockContainer}>
-        <Text style={styles.stockLabel}>Estoque</Text>
-        <Text style={styles.stockValue}>{product.estoque}</Text>
+      <View style={styles.actionsContainer}>
+        <View style={styles.productStockContainer}>
+          <Text style={styles.stockLabel}>Estoque</Text>
+          <Text style={styles.stockValue}>{product.estoque}</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => handleAddStockPress(product)}
+        >
+          <Plus size={20} color={theme.colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => handleEditFullPress(product)}
+        >
+          <Pencil size={20} color={theme.colors.primary} />
+        </TouchableOpacity>
       </View>
+      {/* ------------------------ */}
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {/* Header (sem alterações) */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.headerButton}
@@ -145,7 +175,7 @@ export function EstoqueScreen({ navigation }: EstoqueScreenProps) {
       </View>
 
       <View style={styles.content}>
-        {/* Campo de Consulta/Busca */}
+        {/* Campo de Consulta/Busca (reutilizado) */}
         <View style={styles.searchCard}>
           <View style={styles.searchInputContainer}>
             <Search
@@ -162,7 +192,7 @@ export function EstoqueScreen({ navigation }: EstoqueScreenProps) {
           </View>
         </View>
 
-        {/* Lista de Produtos */}
+        {/* Lista de Produtos (reutilizada) */}
         {loading ? (
           <ActivityIndicator
             style={{ marginTop: 40 }}
@@ -187,7 +217,7 @@ export function EstoqueScreen({ navigation }: EstoqueScreenProps) {
   );
 }
 
-// Estilos
+// Estilos (Modificados para incluir os botões de ação)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
   header: {
@@ -272,6 +302,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.muted,
     borderRadius: 8,
     minWidth: 60,
+    //marginRight: 10,
   },
   stockLabel: {
     fontSize: 10,
@@ -279,9 +310,20 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   stockValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "bold",
     color: theme.colors.primary,
+  },
+
+  actionsContainer: {
+    flexDirection: "column",
+    gap: 5,
+  },
+  actionButton: {
+    padding: 8,
+    borderRadius: 5,
+    backgroundColor: theme.colors.muted,
+    alignItems: "center",
   },
   emptyText: {
     textAlign: "center",

@@ -3,6 +3,7 @@ import React from "react";
 import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "../context/AuthContext";
 
+import { AjusteEstoqueScreen } from "../screens/AjusteEstoqueScreen";
 import { CadastroCliente } from "../screens/CadastroCliente";
 import { CadastroFormaPagamento } from "../screens/CadastroFormaPagamento";
 import { CadastroProduto } from "../screens/CadastroProduto";
@@ -32,6 +33,7 @@ const AppRoutes = () => (
     <AppStack.Screen name="CadastrosMenu" component={CadastrosMenu} />
     <AppStack.Screen name="CadastroCliente" component={CadastroCliente} />
     <AppStack.Screen name="CadastroProduto" component={CadastroProduto} />
+    <AppStack.Screen name="AjusteEstoque" component={AjusteEstoqueScreen} />
     <AppStack.Screen
       name="CadastroFormaPagamento"
       component={CadastroFormaPagamento}
