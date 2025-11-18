@@ -8,6 +8,8 @@ import { CadastroCliente } from "../screens/CadastroCliente";
 import { CadastroFormaPagamento } from "../screens/CadastroFormaPagamento";
 import { CadastroProduto } from "../screens/CadastroProduto";
 import { CadastrosMenu } from "../screens/CadastrosMenu";
+import { ConsultaCliente } from "../screens/ConsultaCliente";
+import { ConsultaMenu } from "../screens/ConsultaMenu";
 import { Dashboard } from "../screens/Dashboard";
 import { EstoqueScreen } from "../screens/EstoqueScreen";
 import { ForgotPasswordScreen } from "../screens/ForgotPassword";
@@ -31,6 +33,7 @@ const AppRoutes = () => (
   <AppStack.Navigator screenOptions={{ headerShown: false }}>
     <AppStack.Screen name="Dashboard" component={Dashboard} />
     <AppStack.Screen name="CadastrosMenu" component={CadastrosMenu} />
+    <AppStack.Screen name="ConsultaMenu" component={ConsultaMenu} />
     <AppStack.Screen name="CadastroCliente" component={CadastroCliente} />
     <AppStack.Screen name="CadastroProduto" component={CadastroProduto} />
     <AppStack.Screen name="AjusteEstoque" component={AjusteEstoqueScreen} />
@@ -38,6 +41,7 @@ const AppRoutes = () => (
       name="CadastroFormaPagamento"
       component={CadastroFormaPagamento}
     />
+    <AppStack.Screen name="ConsultaCliente" component={ConsultaCliente} />
     <AppStack.Screen name="RealizarVenda" component={RealizarVenda} />
     <AppStack.Screen name="OrcamentoScreen" component={OrcamentoScreen} />
     <AppStack.Screen name="EstoqueScreen" component={EstoqueScreen} />

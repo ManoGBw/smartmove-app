@@ -5,6 +5,7 @@ import {
   LogOut,
   Map,
   Package,
+  Search,
   Settings,
   ShoppingCart,
   Users,
@@ -30,6 +31,7 @@ type DashboardProps = {
 };
 
 const menuItems = [
+  // ... (itens de 1 a 7 - Venda, Cadastros, Estoque, etc) ...
   {
     id: "realizar-venda",
     title: "Realizar Venda",
@@ -79,6 +81,13 @@ const menuItems = [
     icon: Settings,
     color: "#2E1E43",
   },
+  {
+    id: "consultar",
+    title: "Consultar",
+    subtitle: "Cliente, venda, orçamento...",
+    icon: Search,
+    color: "#A5A4E0",
+  },
 ];
 
 export function Dashboard({ navigation }: DashboardProps) {
@@ -94,6 +103,9 @@ export function Dashboard({ navigation }: DashboardProps) {
       navigation.navigate("OrcamentoScreen");
     } else if (screenId === "estoque") {
       navigation.navigate("EstoqueScreen");
+    } else if (screenId === "consultar") {
+      // <--- ATUALIZADO AQUI
+      navigation.navigate("ConsultaMenu");
     } else {
       // Para os outros botões que ainda não têm tela
       Alert.alert(
@@ -156,6 +168,7 @@ export function Dashboard({ navigation }: DashboardProps) {
 }
 
 const styles = StyleSheet.create({
+  // ... (Estilos permanecem os mesmos) ...
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
