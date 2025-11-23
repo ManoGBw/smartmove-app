@@ -29,13 +29,12 @@ import Toast from "react-native-toast-message";
 import { API_URL } from "../constants/config";
 import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
-import { Cliente, Orcamento, Produto } from "../types/interfaces";
-
-// --- Interfaces ---
-
-interface ProdutoSelecionado extends Produto {
-  quantity: number;
-}
+import {
+  Cliente,
+  Orcamento,
+  Produto,
+  ProdutoSelecionado,
+} from "../types/interfaces";
 
 type OrcamentoScreenProps = {
   navigation: {

@@ -30,76 +30,107 @@ import Toast from "react-native-toast-message";
 import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
 
-import * as Print from "expo-print"; // <--- ADICIONADO
-import * as Sharing from "expo-sharing"; // <--- ADICIONADO
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 
 import { API_URL } from "../constants/config";
-
-// --- NOVAS E ATUALIZADAS INTERFACES ---
-interface Product {
-  id: number; // Alterado para number
-  nome: string; // Alterado de 'name' para 'nome'
-  valorVenda: number; // Alterado de 'price' para 'valorVenda'
-  estoque: number; // Alterado de 'stock' para 'estoque'
-  quantity?: number;
-}
-interface Client {
-  id: number;
-  nome: string;
-  cpf: string | null;
-  telefone: string | null;
-  // Outros campos do cliente
-}
-interface PaymentMethod {
-  id: number;
-  nome: string;
-  aceitaParcelamento: boolean; // Alterado de 'allowsInstallments' para 'aceitaParcelamento'
-  status: string; // "Ativo" ou "Inativo"
-}
-interface SalePayment {
-  id: string; // ID local para manipulação da lista
-  formaPagamentoId: number;
-  valorPago: string; // Manter como string formatada para o input
-  parcelas: number;
-}
-// --- FIM DAS INTERFACES ---
+import type {
+  Cliente,
+  FormaPagamento,
+  Produto,
+  ProdutoSelecionado,
+  Venda, // <--- Assumindo que você tem essa interface exportada
+  VendaPagamento,
+} from "../types/interfaces";
 
 type RealizarVendaProps = {
   navigation: {
     goBack: () => void;
   };
+  route: {
+    params?: {
+      venda?: Venda; // <--- Parâmetro para edição
+    };
+  };
 };
 
-export function RealizarVenda({ navigation }: RealizarVendaProps) {
-  const { token } = useAuth(); // Usar o token para a API
+export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
+  const { token } = useAuth();
 
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  // Verifica se é edição
+  const vendaEditar = route.params?.venda;
+  const isEditing = !!vendaEditar;
+
+  const [selectedClient, setSelectedClient] = useState<Cliente | null>(null);
   const [clientSearch, setClientSearch] = useState("");
-  const [selectedProducts, setSelectedProducts] = useState<Product[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<
+    ProdutoSelecionado[]
+  >([]);
   const [productSearch, setProductSearch] = useState("");
   const [showProductModal, setShowProductModal] = useState(false);
 
-  // --- NOVOS ESTADOS PARA PAGAMENTO E DADOS DA API ---
-  const [payments, setPayments] = useState<SalePayment[]>([
-    { id: String(Date.now()), formaPagamentoId: 0, valorPago: "", parcelas: 1 },
+  // --- ESTADOS PARA PAGAMENTO E DADOS ---
+  const [payments, setPayments] = useState<VendaPagamento[]>([
+    { id: 0, vendaId: 0, formaPagamentoId: 0, valorPago: "", parcelas: 1 },
   ]);
   const [discount, setDiscount] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [allClients, setAllClients] = useState<Client[]>([]);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [allPaymentMethods, setAllPaymentMethods] = useState<PaymentMethod[]>(
+  const [allClients, setAllClients] = useState<Cliente[]>([]);
+  const [allProducts, setAllProducts] = useState<Produto[]>([]);
+  const [allPaymentMethods, setAllPaymentMethods] = useState<FormaPagamento[]>(
     []
   );
   const [loadingClients, setLoadingClients] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [loadingPayments, setLoadingPayments] = useState(false);
 
-  // --- ESTADO DE FOCO PARA CONTROLAR O SCROLL ---
   const [isInputFocused, setIsInputFocused] = useState(false);
-  // ----------------------------------------------------
 
-  // --- FUNÇÕES DE BUSCA DE DADOS NA API ---
+  useEffect(() => {
+    if (isEditing && vendaEditar) {
+      setSelectedClient(vendaEditar.cliente);
+
+      const produtosMapeados: ProdutoSelecionado[] = vendaEditar.itens.map(
+        (item) => ({
+          id: item.produto.id,
+          nome: item.produto.nome,
+          custo: item.produto.custo,
+          valorVenda: item.valorUnitario,
+          estoque: item.produto.estoque,
+          marca: item.produto.marca,
+          referencia: item.produto.referencia,
+          quantity: item.quantidade,
+          status: item.produto.status,
+        })
+      );
+      setSelectedProducts(produtosMapeados);
+
+      if (vendaEditar.pagamentos && vendaEditar.pagamentos.length > 0) {
+        const pagamentosMapeados: VendaPagamento[] = vendaEditar.pagamentos.map(
+          (p) => ({
+            id: p.id,
+            vendaId: vendaEditar.id,
+            formaPagamentoId: p.formaPagamentoId || 0,
+            valorPago: parseFloat(String(p.valorPago || 0))
+              .toFixed(2)
+              .replace(".", ","),
+            parcelas: p.parcelas,
+          })
+        );
+        setPayments(pagamentosMapeados);
+      }
+
+      // 4. Preencher Desconto
+      setDiscount(
+        parseFloat(String(vendaEditar.desconto || 0))
+          .toFixed(2)
+          .replace(".", ",")
+      );
+    }
+  }, [isEditing, vendaEditar]);
+
+  // --- BUSCAS NA API ---
   const fetchClients = useCallback(async () => {
     if (!token) return;
     setLoadingClients(true);
@@ -108,7 +139,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
-      setAllClients(data);
+      setAllClients(Array.isArray(data) ? data : data.data || []);
     } catch (error) {
       Alert.alert("Erro", "Falha ao carregar clientes.");
     } finally {
@@ -124,7 +155,13 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
-      setAllProducts(data);
+      const produtosFormatados = (
+        Array.isArray(data) ? data : data.data || []
+      ).map((p: any) => ({
+        ...p,
+        valorVenda: Number(p.valorVenda),
+      }));
+      setAllProducts(produtosFormatados);
     } catch (error) {
       Alert.alert("Erro", "Falha ao carregar produtos.");
     } finally {
@@ -140,9 +177,8 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
-      // Filtrar apenas métodos ativos
       setAllPaymentMethods(
-        data.filter((pm: PaymentMethod) => pm.status === "Ativo")
+        data.filter((pm: FormaPagamento) => pm.status === "Ativo")
       );
     } catch (error) {
       Alert.alert("Erro", "Falha ao carregar formas de pagamento.");
@@ -157,53 +193,75 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
     fetchPaymentMethods();
   }, [fetchClients, fetchProducts, fetchPaymentMethods]);
 
-  // --- LÓGICA DE NEGÓCIO ---
+  // --- LÓGICA DE FILTROS ---
   const filteredClients = allClients.filter(
     (c) =>
       c.nome.toLowerCase().includes(clientSearch.toLowerCase()) ||
-      (c.cpf && c.cpf.includes(clientSearch))
+      (c.documento && c.documento.includes(clientSearch))
   );
   const filteredProducts = allProducts.filter((p) =>
     p.nome.toLowerCase().includes(productSearch.toLowerCase())
   );
 
-  const handleSelectClient = (client: Client) => {
+  const handleSelectClient = (client: Cliente) => {
     setSelectedClient(client);
     setClientSearch("");
   };
 
-  const handleAddProduct = (product: Product) => {
-    const existing = selectedProducts.find((p) => p.id === product.id);
-    if (existing) {
-      if ((existing.quantity || 0) < product.estoque) {
-        setSelectedProducts((prev) =>
-          prev.map((p) =>
-            p.id === product.id ? { ...p, quantity: (p.quantity || 1) + 1 } : p
-          )
-        );
-        Toast.show({ type: "success", text1: "Quantidade atualizada" });
-      } else {
+  // --- LÓGICA DE QUANTIDADE (Ajustada para igualar OrcamentoScreen + Validação de Estoque) ---
+  const handleAddProduct = (product: Produto) => {
+    const existingIndex = selectedProducts.findIndex(
+      (p) => p.id === product.id
+    );
+
+    if (existingIndex >= 0) {
+      // Verifica estoque antes de incrementar
+      const currentQty = selectedProducts[existingIndex].quantity || 0;
+      const estoque = product.estoque || 0;
+      if (currentQty + 1 > estoque) {
         Toast.show({ type: "error", text1: "Estoque insuficiente" });
+        return;
       }
+
+      // Se já existe, incrementa
+      const updatedProducts = [...selectedProducts];
+      updatedProducts[existingIndex].quantity += 1;
+      setSelectedProducts(updatedProducts);
+      Toast.show({ type: "success", text1: "Quantidade atualizada" });
     } else {
-      setSelectedProducts((prev) => [...prev, { ...product, quantity: 1 }]);
+      const estoque = product.estoque || 0;
+      if (estoque < 1) {
+        Toast.show({ type: "error", text1: "Produto sem estoque" });
+        return;
+      }
+
+      // Se não existe, cria novo
+      const newProduct: ProdutoSelecionado = {
+        ...product,
+        quantity: 1,
+      };
+      setSelectedProducts((prev) => [...prev, newProduct]);
       Toast.show({ type: "success", text1: "Produto adicionado" });
     }
   };
 
   const handleUpdateQuantity = (productId: number, newQuantity: number) => {
     const product = allProducts.find((p) => p.id === productId);
+    const estoque = product?.estoque || 0;
+
     if (newQuantity <= 0) {
       setSelectedProducts((prev) => prev.filter((p) => p.id !== productId));
       Toast.show({ type: "info", text1: "Produto removido" });
-    } else if (product && newQuantity <= product.estoque) {
+    } else {
+      if (newQuantity > estoque) {
+        Toast.show({ type: "error", text1: "Estoque insuficiente" });
+        return;
+      }
       setSelectedProducts((prev) =>
         prev.map((p) =>
           p.id === productId ? { ...p, quantity: newQuantity } : p
         )
       );
-    } else {
-      Toast.show({ type: "error", text1: "Estoque insuficiente" });
     }
   };
 
@@ -211,10 +269,9 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
     handleUpdateQuantity(productId, 0);
   };
 
-  // Funções de Cálculo
+  // --- CÁLCULOS ---
   const parseCurrency = (value: string): number => {
     if (!value) return 0;
-    // Remove o separador de milhar e troca a vírgula por ponto
     const numberString = value.replace(/\./g, "").replace(",", ".");
     return parseFloat(numberString) || 0;
   };
@@ -224,7 +281,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
   const getDiscountValue = () => parseCurrency(discount);
 
   const subtotal = selectedProducts.reduce(
-    (sum, p) => sum + p.valorVenda * (p.quantity || 1),
+    (sum, p) => sum + Number(p.valorVenda) * (p.quantity || 1),
     0
   );
   const total = subtotal - getDiscountValue();
@@ -234,12 +291,13 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
   );
   const remaining = total - totalPaid;
 
-  // Lógica de Múltiplos Pagamentos
+  // --- PAGAMENTOS ---
   const handleAddPayment = () => {
     setPayments((prev) => [
       ...prev,
       {
-        id: String(Date.now()),
+        id: Date.now(), // ID temporário
+        vendaId: isEditing && vendaEditar ? vendaEditar.id : 0,
         formaPagamentoId: 0,
         valorPago: "",
         parcelas: 1,
@@ -247,7 +305,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
     ]);
   };
 
-  const handleRemovePayment = (id: string) => {
+  const handleRemovePayment = (id: number) => {
     if (payments.length === 1) {
       Alert.alert(
         "Atenção",
@@ -258,10 +316,9 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
     setPayments((prev) => prev.filter((p) => p.id !== id));
   };
 
-  // Função central para alterar o estado do pagamento (exceto valor do TextInput, que usa local)
   const handlePaymentChange = (
-    id: string,
-    field: keyof SalePayment,
+    id: number,
+    field: keyof VendaPagamento,
     value: string | number
   ) => {
     setPayments((prev) =>
@@ -281,25 +338,25 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
     return method ? method.nome : "Desconhecida";
   };
 
-  // --- FUNÇÃO PARA GERAR HTML DO PDF (ADAPTADA DO ORÇAMENTO) ---
+  // --- PDF ---
   const createHtmlForSalePdf = (
-    client: Client,
-    products: Product[],
-    payments: SalePayment[],
+    client: Cliente,
+    products: Produto[],
+    payments: VendaPagamento[],
     discount: number,
     subtotal: number,
     totalValue: number,
     totalPaid: number,
     remaining: number
   ) => {
-    const productRows = products
+    const productRows = (products as ProdutoSelecionado[])
       .map(
         (p) => `
     <tr>
       <td>${p.nome}</td>
       <td>${p.quantity}</td>
-      <td>R$ ${formatCurrency(p.valorVenda)}</td>
-      <td>R$ ${formatCurrency(p.valorVenda * (p.quantity || 1))}</td>
+      <td>R$ ${formatCurrency(Number(p.valorVenda))}</td>
+      <td>R$ ${formatCurrency(Number(p.valorVenda) * (p.quantity || 1))}</td>
     </tr>
   `
       )
@@ -340,42 +397,26 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
       </head>
       <body>
         <h1>Smart Move Vendas</h1>
-        <h2>Comprovante de Venda</h2>
+        <h2>${isEditing ? "Atualização de Venda" : "Comprovante de Venda"}</h2>
 
         <h3>Cliente:</h3>
         <p>
           <strong>Nome:</strong> ${client.nome}<br/>
-          <strong>CPF:</strong> ${client.cpf || "Não informado"}<br/>
-          <strong>Telefone:</strong> ${client.telefone || "Não informado"}
+          <strong>Documento:</strong> ${
+            client.documento || "Não informado"
+          }<br/>
         </p>
 
-        <h3>Itens Vendidos:</h3>
+        <h3>Itens:</h3>
         <table>
-          <thead>
-            <tr>
-              <th>Produto</th>
-              <th>Qtd.</th>
-              <th>Valor Unit.</th>
-              <th>Subtotal</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${productRows}
-          </tbody>
+          <thead><tr><th>Produto</th><th>Qtd.</th><th>Valor Unit.</th><th>Subtotal</th></tr></thead>
+          <tbody>${productRows}</tbody>
         </table>
 
         <h3>Pagamentos:</h3>
         <table>
-          <thead>
-            <tr>
-              <th>Forma de Pagamento</th>
-              <th>Parcelas</th>
-              <th>Valor Pago</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${paymentRows}
-          </tbody>
+          <thead><tr><th>Forma</th><th>Parc.</th><th>Valor</th></tr></thead>
+          <tbody>${paymentRows}</tbody>
         </table>
 
         <h3>Resumo:</h3>
@@ -388,46 +429,20 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
           }"><span>Desconto:</span><span>- R$ ${formatCurrency(
       discount
     )}</span></div>
-          <div class="summary-row total" style="border-top: 1px solid #ddd; padding-top: 5px; margin-top: 5px;"><span>Total da Venda:</span><span>R$ ${formatCurrency(
+          <div class="summary-row total"><span>Total:</span><span>R$ ${formatCurrency(
             totalValue
           )}</span></div>
-          <div class="summary-row total"><span>Total Pago:</span><span>R$ ${formatCurrency(
-            totalPaid
-          )}</span></div>
-          <div class="summary-row total" style="color: ${
-            remaining > 0.01
-              ? theme.colors.destructive
-              : remaining < -0.01
-              ? "green"
-              : theme.colors.primary
-          }"><span>Restante/Troco:</span><span>R$ ${formatCurrency(
-      remaining
-    )}</span></div>
         </div>
       </body>
     </html>
   `;
   };
 
-  // --- FUNÇÃO PARA GERAR PDF E COMPARTILHAR (ADAPTADA DO ORÇAMENTO) ---
-  const handleGeneratePDFAndShare = async (saleDetails: {
-    client: Client;
-    products: Product[];
-    payments: SalePayment[];
-    discount: number;
-    subtotal: number;
-    totalValue: number;
-    totalPaid: number;
-    remaining: number;
-  }) => {
+  const handleGeneratePDFAndShare = async (saleDetails: any) => {
     if (!(await Sharing.isAvailableAsync())) {
-      Alert.alert(
-        "Erro",
-        "O compartilhamento não está disponível neste dispositivo."
-      );
+      Alert.alert("Erro", "Compartilhamento indisponível.");
       return;
     }
-
     try {
       const htmlContent = createHtmlForSalePdf(
         saleDetails.client,
@@ -439,25 +454,17 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
         saleDetails.totalPaid,
         saleDetails.remaining
       );
-
-      const { uri } = await Print.printToFileAsync({
-        html: htmlContent,
-        base64: false,
-        margins: { top: 30, right: 20, bottom: 20, left: 20 },
-      });
-
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
       await Sharing.shareAsync(uri, {
         mimeType: "application/pdf",
-        dialogTitle: "Compartilhar Comprovante de Venda",
         UTI: ".pdf",
       });
     } catch (error) {
-      console.error("Erro ao gerar/compartilhar PDF:", error);
-      Alert.alert("Erro", "Não foi possível gerar e compartilhar o PDF.");
+      Alert.alert("Erro", "Falha ao gerar PDF.");
     }
   };
-  // ------------------------------------------------------------------
 
+  // --- FINALIZAR / SALVAR ---
   const handleFinalizeSale = async () => {
     if (loading) return;
 
@@ -466,7 +473,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
       return;
     }
     if (selectedProducts.length === 0) {
-      Alert.alert("Atenção", "Adicione pelo menos um produto.");
+      Alert.alert("Atenção", "Adicione produtos.");
       return;
     }
     if (
@@ -474,21 +481,13 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
         (p) => !p.formaPagamentoId || parseCurrency(p.valorPago) <= 0
       )
     ) {
-      Alert.alert(
-        "Atenção",
-        "Selecione a forma de pagamento e insira o valor pago em todas as formas."
-      );
+      Alert.alert("Atenção", "Verifique as formas de pagamento e valores.");
       return;
     }
     if (Math.abs(remaining) > 0.01) {
-      // Tolerância de 1 centavo para floating point
       Alert.alert(
         "Atenção",
-        `O valor pago (R$ ${formatCurrency(
-          totalPaid
-        )}) não corresponde ao total (R$ ${formatCurrency(
-          total
-        )}). Restante: R$ ${formatCurrency(remaining)}.`
+        `Valores não batem. Restante: R$ ${formatCurrency(remaining)}.`
       );
       return;
     }
@@ -503,7 +502,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
           quantidade: p.quantity,
           valorUnitario: p.valorVenda,
         })),
-        observacoes: "Venda realizada pelo app Smart Move", // Hardcoded por enquanto
+        observacoes: "Venda app",
         desconto: getDiscountValue(),
         status: "CONCLUIDA",
         pagamentos: payments.map((p) => ({
@@ -513,8 +512,16 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
         })),
       };
 
-      const response = await fetch(`${API_URL}/vendas`, {
-        method: "POST",
+      let url = `${API_URL}/vendas`;
+      let method = "POST";
+
+      if (isEditing && vendaEditar) {
+        url = `${API_URL}/vendas/${vendaEditar.id}`;
+        method = "PUT"; // Alterado para PUT na edição
+      }
+
+      const response = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -525,10 +532,9 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Não foi possível finalizar a venda.");
+        throw new Error(data.message || "Erro ao salvar a venda.");
       }
 
-      // --- CHAMADA DA FUNÇÃO DE PDF E COMPARTILHAMENTO ---
       await handleGeneratePDFAndShare({
         client: selectedClient,
         products: selectedProducts,
@@ -539,112 +545,79 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
         totalPaid: totalPaid,
         remaining: remaining,
       });
-      // -----------------------------------------------------
 
-      Toast.show({ type: "success", text1: "Venda finalizada com sucesso!" });
+      Toast.show({
+        type: "success",
+        text1: isEditing ? "Venda atualizada!" : "Venda finalizada!",
+      });
       setTimeout(() => navigation.goBack(), 1500);
     } catch (error: any) {
-      // Adicionado log de erro para facilitar a análise de um crash
-      console.error("CRASH DEBUG: Erro ao finalizar venda:", error);
-      Alert.alert(
-        "Erro na Venda",
-        error.message || "Ocorreu um erro inesperado ao salvar a venda."
-      );
+      Alert.alert("Erro", error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Componente de Pagamento Individual (Refatorado para estado local de input)
+  // --- COMPONENTE INPUT DE PAGAMENTO ---
   const PaymentInput = ({
     payment,
     index,
   }: {
-    payment: SalePayment;
+    payment: VendaPagamento;
     index: number;
   }) => {
-    // ESTADO LOCAL para gerenciar a digitação
     const [localValue, setLocalValue] = useState(
       payment.valorPago.replace(".", ",")
     );
 
-    // Sincronizar localValue com o valor formatado do estado pai APÓS O BLUR/APÓS ATUALIZAÇÃO DO PAI
     useEffect(() => {
       const formattedParentValue = payment.valorPago.replace(".", ",");
-
-      // A sincronização ocorre se o campo não estiver focado E o valor for diferente.
       if (!isInputFocused && localValue !== formattedParentValue) {
         setLocalValue(formattedParentValue);
       }
-    }, [payment.valorPago, isInputFocused]); // localValue REMOVIDO do dep array.
+    }, [payment.valorPago, isInputFocused]);
 
-    // --- FUNÇÃO handleLocalValueChange ---
     const handleLocalValueChange = (text: string) => {
-      // Permite apenas números e a vírgula para a digitação.
       const cleanedText = text.replace(/[^0-9,]/g, "");
       setLocalValue(cleanedText);
-      // Não atualiza o estado 'payments' aqui!
     };
 
-    // --- LÓGICA DE FOCO E BLUR ---
     const handleFocus = () => {
-      console.log(`[LOG DEBUG] FOCUS: ID ${payment.id}`);
-
-      // CORREÇÃO FINAL: Deferir a atualização de estado global E a limpeza do valor
-      // para o próximo ciclo de evento. Isso permite que o teclado nativo abra
-      // completamente antes que o React forçe a re-renderização ou o bloqueio do scroll.
       setTimeout(() => {
         setIsInputFocused(true);
-
-        // Remove a formatação ao entrar no campo para facilitar a digitação
         const rawValue = payment.valorPago.replace(/[^0-9,]/g, "");
         setLocalValue(rawValue);
       }, 0);
     };
 
     const handleBlur = () => {
-      console.log(
-        `[LOG DEBUG] BLUR: ID ${payment.id}, Valor digitado: ${localValue}`
-      );
-
-      // Deferir a atualização de estado global para que o scroll volte a funcionar no próximo ciclo
       setTimeout(() => setIsInputFocused(false), 0);
-
-      // 1. Processamento e sanitização do valor local
       let cleanValue = localValue.replace(/[^0-9,]/g, "");
       const numericValue = parseCurrency(cleanValue);
       let finalValue = numericValue;
 
-      // 2. Lógica de limite/sugestão
+      // Sugestão de valor para completar o total
       if (payments.length === 1) {
         finalValue = Math.min(numericValue, total);
       }
 
-      // 3. Atualiza o estado principal (do componente RealizarVenda) com o valor formatado
-      handlePaymentChange(
-        payment.id,
-        "valorPago",
-        formatCurrency(finalValue) // Envia o valor formatado ao pai
-      );
+      handlePaymentChange(payment.id, "valorPago", formatCurrency(finalValue));
     };
-    // ----------------------------
 
     const selectedMethod = allPaymentMethods.find(
       (pm) => pm.id === payment.formaPagamentoId
     );
     const canInstallment = selectedMethod?.aceitaParcelamento || false;
 
-    // Lógica de sugestão de valor (para placeholder)
+    // Placeholder inteligente
     let defaultPaymentValue = parseCurrency(payment.valorPago);
-
     if (payments.length === 1 && total > 0) {
       defaultPaymentValue = total;
     } else if (payments.length > 1 && parseCurrency(payment.valorPago) === 0) {
       const totalOthers = payments
         .filter((p, i) => i !== index)
         .reduce((sum, p) => sum + parseCurrency(p.valorPago), 0);
-      const remainingForSuggestion = total - totalOthers;
-      defaultPaymentValue = Math.max(0, remainingForSuggestion);
+      defaultPaymentValue = Math.max(0, total - totalOthers);
     }
 
     return (
@@ -691,13 +664,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
                 handlePaymentChange(payment.id, "parcelas", v)
               }
               items={[...Array(12)].map((_, i) => ({
-                label: `${i + 1}x ${
-                  parseCurrency(payment.valorPago) > 0
-                    ? `de R$ ${(parseCurrency(payment.valorPago) / (i + 1))
-                        .toFixed(2)
-                        .replace(".", ",")}`
-                    : ""
-                }`,
+                label: `${i + 1}x`,
                 value: i + 1,
               }))}
               placeholder={{ label: "1x à vista", value: 1 }}
@@ -723,7 +690,6 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
     );
   };
 
-  // --- JSX (Renderização da Tela) ---
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -736,11 +702,12 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
           <ShoppingCart size={20} color={theme.colors.primaryForeground} />
-          <Text style={styles.headerTitle}>Realizar Venda</Text>
+          <Text style={styles.headerTitle}>
+            {isEditing ? `Editar Venda #${vendaEditar?.id}` : "Realizar Venda"}
+          </Text>
         </View>
       </View>
 
-      {/* CONTAINER PRINCIPAL: KeyboardAvoidingView */}
       <KeyboardAvoidingView
         style={styles.contentContainer}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -748,9 +715,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
         <ScrollView
           contentContainerStyle={styles.scrollContainer}
           keyboardShouldPersistTaps="handled"
-          // --- SCROLL CONTROLADO PARA EVITAR ROUBO DE FOCO ---
           scrollEnabled={!isInputFocused}
-          // --------------------------------------------------
         >
           {/* Cliente */}
           <View style={styles.card}>
@@ -765,14 +730,12 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
                   />
                   <TextInput
                     style={styles.searchInput}
-                    placeholder="Buscar cliente por nome ou CPF..."
+                    placeholder="Buscar cliente..."
                     value={clientSearch}
                     onChangeText={setClientSearch}
                   />
                 </View>
-                {loadingClients ? (
-                  <ActivityIndicator style={{ marginVertical: 10 }} />
-                ) : clientSearch.length > 0 ? (
+                {clientSearch.length > 0 && (
                   <View>
                     {filteredClients.map((c) => (
                       <TouchableOpacity
@@ -781,13 +744,10 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
                         onPress={() => handleSelectClient(c)}
                       >
                         <Text style={styles.searchResultText}>{c.nome}</Text>
-                        <Text style={styles.searchResultSubtext}>
-                          CPF: {c.cpf || "Não informado"}
-                        </Text>
                       </TouchableOpacity>
                     ))}
                   </View>
-                ) : null}
+                )}
               </>
             ) : (
               <View style={styles.selectedItemContainer}>
@@ -796,7 +756,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
                     {selectedClient.nome}
                   </Text>
                   <Text style={styles.selectedItemSubtext}>
-                    CPF: {selectedClient.cpf || "Não informado"}
+                    {selectedClient.documento}
                   </Text>
                 </View>
                 <TouchableOpacity onPress={() => setSelectedClient(null)}>
@@ -826,11 +786,8 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.productName}>{p.nome}</Text>
                     <Text style={styles.productDetails}>
-                      R${" "}
-                      {(parseFloat(String(p.valorVenda)) || 0)
-                        .toFixed(2)
-                        .replace(".", ",")}{" "}
-                      x {p.quantity}
+                      R$ {Number(p.valorVenda).toFixed(2).replace(".", ",")} x{" "}
+                      {p.quantity}
                     </Text>
                   </View>
                   <View style={styles.quantityControl}>
@@ -862,11 +819,9 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
           {selectedProducts.length > 0 && (
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Pagamento *</Text>
-
               {payments.map((p, index) => (
                 <PaymentInput key={p.id} payment={p} index={index} />
               ))}
-
               <TouchableOpacity
                 style={styles.linkButton}
                 onPress={handleAddPayment}
@@ -897,7 +852,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
           {/* Resumo */}
           {selectedProducts.length > 0 && (
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Resumo da Venda</Text>
+              <Text style={styles.cardTitle}>Resumo</Text>
               <View style={styles.summaryRow}>
                 <Text>Subtotal</Text>
                 <Text>R$ {formatCurrency(subtotal)}</Text>
@@ -912,22 +867,12 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
                   </Text>
                 </View>
               )}
-              <View
-                style={[
-                  styles.summaryRow,
-                  {
-                    borderTopWidth: 1,
-                    borderColor: "#eee",
-                    paddingTop: 10,
-                    marginTop: 10,
-                  },
-                ]}
-              >
+              <View style={[styles.summaryRow, { marginTop: 10 }]}>
                 <Text style={styles.totalText}>Total</Text>
                 <Text style={styles.totalText}>R$ {formatCurrency(total)}</Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={styles.totalText}>Total Pago</Text>
+                <Text style={styles.totalText}>Pago</Text>
                 <Text style={styles.totalText}>
                   R$ {formatCurrency(totalPaid)}
                 </Text>
@@ -939,11 +884,7 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
                     styles.totalText,
                     {
                       color:
-                        remaining > 0.01
-                          ? theme.colors.destructive
-                          : remaining < -0.01
-                          ? "green"
-                          : theme.colors.primary,
+                        remaining > 0.01 ? theme.colors.destructive : "green",
                     },
                   ]}
                 >
@@ -954,19 +895,17 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
           )}
         </ScrollView>
 
-        {/* Rodapé Fixo (dentro do KeyboardAvoidingView) */}
+        {/* Footer */}
         {selectedProducts.length > 0 && (
           <View style={styles.footer}>
             <TouchableOpacity
               style={[
                 styles.finalizeButton,
-                (loading || !selectedClient || Math.abs(remaining) > 0.01) &&
+                (loading || Math.abs(remaining) > 0.01) &&
                   styles.finalizeButtonDisabled,
               ]}
               onPress={handleFinalizeSale}
-              disabled={
-                loading || !selectedClient || Math.abs(remaining) > 0.01
-              }
+              disabled={loading || Math.abs(remaining) > 0.01}
             >
               {loading ? (
                 <ActivityIndicator color="white" />
@@ -974,7 +913,9 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
                 <>
                   <Check size={20} color="white" />
                   <Text style={styles.finalizeButtonText}>
-                    Finalizar Venda - R$ {formatCurrency(total)}
+                    {isEditing
+                      ? "Salvar Alterações"
+                      : `Finalizar - R$ ${formatCurrency(total)}`}
                   </Text>
                 </>
               )}
@@ -982,7 +923,6 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
           </View>
         )}
       </KeyboardAvoidingView>
-      {/* FIM DO CONTAINER PRINCIPAL */}
 
       {/* Modal de Produtos */}
       <Modal
@@ -1008,31 +948,24 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
               />
             </View>
             <ScrollView>
-              {loadingProducts ? (
-                <ActivityIndicator style={{ marginVertical: 10 }} />
-              ) : (
-                filteredProducts.map((p) => (
-                  <View key={p.id} style={styles.modalProductItem}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.productName}>{p.nome}</Text>
-                      <Text style={styles.productDetails}>
-                        R${" "}
-                        {(parseFloat(String(p.valorVenda)) || 0)
-                          .toFixed(2)
-                          .replace(".", ",")}{" "}
-                        | Estoque: {p.estoque}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.addButton}
-                      onPress={() => handleAddProduct(p)}
-                    >
-                      <Plus size={16} color="white" />
-                      <Text style={styles.addButtonText}>Adicionar</Text>
-                    </TouchableOpacity>
+              {filteredProducts.map((p) => (
+                <View key={p.id} style={styles.modalProductItem}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.productName}>{p.nome}</Text>
+                    <Text style={styles.productDetails}>
+                      R$ {Number(p.valorVenda).toFixed(2).replace(".", ",")} |
+                      Est: {p.estoque}
+                    </Text>
                   </View>
-                ))
-              )}
+                  <TouchableOpacity
+                    style={styles.addButton}
+                    onPress={() => handleAddProduct(p)}
+                  >
+                    <Plus size={16} color="white" />
+                    <Text style={styles.addButtonText}>Add</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
             </ScrollView>
             <TouchableOpacity
               style={styles.closeButton}
@@ -1047,16 +980,15 @@ export function RealizarVenda({ navigation }: RealizarVendaProps) {
   );
 }
 
-// --- Estilos ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
-  contentContainer: { flex: 1 }, // Estilo mantido
+  contentContainer: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: theme.colors.primary,
     padding: 16,
-    paddingTop: 20,
+    paddingTop: 40,
   },
   headerButton: { padding: 8 },
   headerTitleContainer: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1065,7 +997,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
   },
-  scrollContainer: { padding: 16, paddingBottom: 16 }, // Padding ajustado para o footer
+  scrollContainer: { padding: 16, paddingBottom: 16 },
   card: {
     backgroundColor: "white",
     borderRadius: 12,
@@ -1103,7 +1035,6 @@ const styles = StyleSheet.create({
     borderBottomColor: "#eee",
   },
   searchResultText: { fontSize: 16, color: theme.colors.primary },
-  searchResultSubtext: { fontSize: 12, color: theme.colors.foreground },
   selectedItemContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1230,7 +1161,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: theme.colors.primary,
   },
-  // --- NOVOS ESTILOS PARA PAGAMENTO ---
   paymentItemCard: {
     backgroundColor: theme.colors.inputBackground,
     borderRadius: 8,
