@@ -104,8 +104,11 @@ export function Dashboard({ navigation }: DashboardProps) {
     } else if (screenId === "estoque") {
       navigation.navigate("EstoqueScreen");
     } else if (screenId === "consultar") {
-      // <--- ATUALIZADO AQUI
       navigation.navigate("ConsultaMenu");
+    } else if (screenId === "rotas") {
+      navigation.navigate("PlanejamentoRotas");
+    } else if (screenId === "relatorios") {
+      navigation.navigate("RelatoriosScreen");
     } else {
       // Para os outros botões que ainda não têm tela
       Alert.alert(

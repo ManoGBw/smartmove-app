@@ -1,6 +1,8 @@
 import {
+  ArrowDownUp,
   ArrowLeft,
   FileText,
+  House,
   Search,
   ShoppingCart,
   Users,
@@ -19,7 +21,6 @@ type ConsultaMenuProps = {
 
 // Opções para o novo menu de consulta
 const consultaOptions = [
-  // ... (outras opções)
   {
     id: "clientes",
     title: "Consultar Cliente",
@@ -41,12 +42,30 @@ const consultaOptions = [
     icon: FileText,
     color: "#A5A4E0", // Cor secundária
   },
+  {
+    id: "bairros",
+    title: "Consultar Bairro",
+    subtitle: "Buscar bairros cadastrados",
+    icon: House,
+    color: "#2E1E43", // Cor primária
+  },
+  {
+    id: "rotas",
+    title: "Consultar Rotas",
+    subtitle: "Buscar rotas cadastradas",
+    icon: ArrowDownUp,
+    color: "#2E1E43", // Cor primária
+  },
 ];
 
 export function ConsultaMenu({ navigation }: ConsultaMenuProps) {
   const handleOptionPress = (optionId: string) => {
     if (optionId === "clientes") {
-      navigation.navigate("ConsultaCliente"); // <--- ATUALIZADO AQUI
+      navigation.navigate("ConsultaCliente");
+    } else if (optionId === "bairros") {
+      navigation.navigate("ConsultaBairro");
+    } else if (optionId === "rotas") {
+      navigation.navigate("ConsultaRota");
     } else if (optionId === "vendas") {
       // Futuramente: navigation.navigate("ConsultaVenda");
       Alert.alert(
@@ -54,16 +73,11 @@ export function ConsultaMenu({ navigation }: ConsultaMenuProps) {
         "A tela de consulta de vendas está em construção."
       );
     } else if (optionId === "orcamentos") {
-      // Futuramente: navigation.navigate("ConsultaOrcamento");
-      Alert.alert(
-        "Em desenvolvimento",
-        "A tela de consulta de orçamentos está em construção."
-      );
+      navigation.navigate("ConsultaOrcamento");
     }
   };
 
   return (
-    // ... (o resto do JSX permanece igual)
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>

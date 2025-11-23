@@ -33,7 +33,7 @@ import { theme } from "../theme/colors";
 import * as Print from "expo-print"; // <--- ADICIONADO
 import * as Sharing from "expo-sharing"; // <--- ADICIONADO
 
-const API_URL = "http://72.60.12.191:3006/api/v1";
+import { API_URL } from "../constants/config";
 
 // --- NOVAS E ATUALIZADAS INTERFACES ---
 interface Product {

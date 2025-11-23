@@ -1,5 +1,3 @@
-// src/screens/ConsultaCliente.tsx
-
 import { ArrowLeft, Pencil, Search, Users } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -13,21 +11,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { API_URL } from "../constants/config";
 import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
-
-const API_URL = "http://72.60.12.191:3006/api/v1";
-
-// Interface do Cliente (baseada nas telas de Venda e Cadastro)
-interface Client {
-  id: number;
-  nome: string;
-  cpf: string | null;
-  telefone: string | null;
-  endereco: string | null;
-  email: string | null;
-  status: string; // "ATIVO" ou "INATIVO"
-}
+import type { Cliente } from "../types/interfaces";
 
 type ConsultaClienteProps = {
   navigation: {
@@ -41,8 +28,8 @@ export function ConsultaCliente({ navigation }: ConsultaClienteProps) {
   const { token } = useAuth();
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [clients, setClients] = useState<Client[]>([]);
-  const [filteredClients, setFilteredClients] = useState<Client[]>([]);
+  const [clients, setClients] = useState<Cliente[]>([]);
+  const [filteredClients, setFilteredClients] = useState<Cliente[]>([]);
 
   // Função para buscar todos os clientes
   const fetchClients = useCallback(async () => {
@@ -64,7 +51,7 @@ export function ConsultaCliente({ navigation }: ConsultaClienteProps) {
         throw new Error("Não foi possível carregar os clientes.");
       }
 
-      const data: Client[] = await response.json();
+      const data: Cliente[] = await response.json();
       setClients(data);
       setFilteredClients(data); // Inicialmente, mostra todos
     } catch (error: any) {
@@ -89,25 +76,14 @@ export function ConsultaCliente({ navigation }: ConsultaClienteProps) {
     const query = searchQuery.toLowerCase();
     const filtered = clients.filter(
       (c) =>
-        c.nome.toLowerCase().includes(query) || (c.cpf && c.cpf.includes(query))
+        c.nome.toLowerCase().includes(query) ||
+        (c.documento && c.documento.includes(query))
     );
     setFilteredClients(filtered);
   }, [searchQuery, clients]);
 
-  const handleEditPress = (client: Client) => {
-    // A tela CadastroCliente.tsx
-    // ainda não suporta edição (diferente da CadastroProduto.tsx).
-    // Quando ela suportar, a linha abaixo deve ser usada:
-    // navigation.navigate("CadastroCliente", { clientId: client.id });
-
-    Alert.alert(
-      "Em desenvolvimento",
-      "A tela de edição de cliente está em construção."
-    );
-  };
-
   // Componente para renderizar cada item da lista
-  const ClientItem = ({ client }: { client: Client }) => (
+  const ClientItem = ({ client }: { client: Cliente }) => (
     <View
       style={[
         styles.clientItem,
@@ -117,7 +93,7 @@ export function ConsultaCliente({ navigation }: ConsultaClienteProps) {
       <View style={styles.clientInfo}>
         <Text style={styles.clientName}>{client.nome}</Text>
         <Text style={styles.clientDetail}>
-          CPF: {client.cpf || "Não informado"}
+          Documento: {client.documento || "Não informado"}
         </Text>
         <Text style={styles.clientDetail}>
           Tel: {client.telefone || "Não informado"}
@@ -139,7 +115,9 @@ export function ConsultaCliente({ navigation }: ConsultaClienteProps) {
         </View>
         <TouchableOpacity
           style={styles.actionButton}
-          onPress={() => handleEditPress(client)}
+          onPress={() =>
+            navigation.navigate("CadastroCliente", { cliente: client })
+          }
         >
           <Pencil size={20} color={theme.colors.primary} />
         </TouchableOpacity>

@@ -15,11 +15,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 // 2. Importar o useAuth
+import { API_URL } from "../constants/config";
 import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
-
-// 3. Definir a URL da API
-const API_URL = "http://72.60.12.191:3006/api/v1";
 
 // --- Componente customizado para simular um Radio Button ---
 interface RadioOptionProps {

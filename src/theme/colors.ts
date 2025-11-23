@@ -18,6 +18,7 @@ export const colors = {
   accentForeground: "#2E1E43",
 
   destructive: "#C9453E",
+  caution: "#FFC107",
 
   inputBackground: "#F8F8FA",
   border: "rgba(0, 0, 0, 0.1)",

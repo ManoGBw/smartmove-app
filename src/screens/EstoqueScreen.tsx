@@ -13,11 +13,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { API_URL } from "../constants/config";
 import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
-
-// URL base da API (já definida em outros arquivos)
-const API_URL = "http://72.60.12.191:3006/api/v1";
 
 interface Product {
   id: number;

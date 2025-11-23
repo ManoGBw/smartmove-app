@@ -14,9 +14,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { API_URL } from "../constants/config";
 import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
-
 // Definindo a interface para o produto
 interface ProductData {
   nome: string;
@@ -27,9 +27,6 @@ interface ProductData {
   estoque: number;
   status: string; // "ATIVO" ou "INATIVO"
 }
-
-// 2. Definir a URL da API
-const API_URL = "http://72.60.12.191:3006/api/v1";
 
 type CadastroProdutoProps = {
   route?: {

@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -16,8 +17,9 @@ import {
 import { API_URL } from "../constants/config";
 import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
-import type { Bairro, Cliente, Municipio } from "../types/interfaces";
+import type { Bairro, Municipio } from "../types/interfaces";
 
+// --- COMPONENTE DE MODAL (Reutilizado) ---
 const SearchModal = ({
   visible,
   onClose,
@@ -92,97 +94,72 @@ const SearchModal = ({
 );
 
 // --- TELA PRINCIPAL ---
-type CadastroClienteProps = {
+type CadastroBairroProps = {
   navigation: {
     goBack: () => void;
   };
   route: {
     params?: {
-      cliente?: Cliente;
+      bairro?: Bairro;
     };
   };
 };
 
-export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
+export function CadastroBairro({ navigation, route }: CadastroBairroProps) {
   const { token } = useAuth();
 
-  // Verifica se veio um cliente para edição
-  const clienteEditar = route.params?.cliente;
-  const isEditing = !!clienteEditar;
+  // Verifica se é edição
+  const bairroEditar = route.params?.bairro;
+  const isEditing = !!bairroEditar;
 
   // Estados do Formulário
   const [nome, setNome] = useState("");
-  const [cpf, setCpf] = useState("");
-  const [telefone, setTelefone] = useState("");
-  const [email, setEmail] = useState("");
-  const [endereco, setEndereco] = useState("");
-
-  // Estados de Seleção
+  const [statusAtivo, setStatusAtivo] = useState(true); // true = ATIVO, false = INATIVO
   const [selectedMunicipio, setSelectedMunicipio] = useState<Municipio | null>(
     null
   );
-  const [selectedBairro, setSelectedBairro] = useState<Bairro | null>(null);
 
-  // Estados dos Modais
+  // Estados de Controle
   const [modalMunicipioVisible, setModalMunicipioVisible] = useState(false);
-  const [modalBairroVisible, setModalBairroVisible] = useState(false);
-
-  // Estados de Busca
   const [searchResultsMunicipio, setSearchResultsMunicipio] = useState<
     Municipio[]
   >([]);
-  const [searchResultsBairro, setSearchResultsBairro] = useState<Bairro[]>([]);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [loadingSave, setLoadingSave] = useState(false);
-  const [latitude, setLatitude] = useState<number | string | null>(null);
-  const [longitude, setLongitude] = useState<number | string | null>(null);
 
-  // --- NOVO: POPULAR CAMPOS NA EDIÇÃO ---
+  // --- POPULAR CAMPOS NA EDIÇÃO ---
   useEffect(() => {
-    if (isEditing && clienteEditar) {
-      setNome(clienteEditar.nome);
-      setCpf(clienteEditar.documento || "");
-      setTelefone(clienteEditar.telefone || "");
-      setEmail(clienteEditar.email || "");
-      setEndereco(clienteEditar.endereco || "");
-      setLatitude(clienteEditar.latitude);
-      setLongitude(clienteEditar.longitude);
+    if (isEditing && bairroEditar) {
+      setNome(bairroEditar.nome);
+      setStatusAtivo(bairroEditar.status === "ATIVO"); // Converte string para booleano
 
-      // Lógica para preencher Bairro e Município automaticamente
-      // Nota: O objeto cliente vindo da lista precisa ter o 'bairro' populado (include no Prisma)
-      if (clienteEditar.bairro) {
-        setSelectedBairro(clienteEditar.bairro);
-
-        // Se o bairro tiver o município aninhado, preenchemos também
-        if (clienteEditar.bairro.municipio) {
-          setSelectedMunicipio(clienteEditar.bairro.municipio);
-        }
+      if (bairroEditar.municipio) {
+        setSelectedMunicipio(bairroEditar.municipio);
       }
     }
-  }, [isEditing, clienteEditar]);
+  }, [isEditing, bairroEditar]);
 
-  // --- FUNÇÕES DE BUSCA ---
+  // --- BUSCA DE MUNICÍPIOS ---
   const searchMunicipios = useCallback(
     async (query: string) => {
       if (query.length < 3) {
         setSearchResultsMunicipio([]);
         return;
       }
-
       setLoadingSearch(true);
       try {
         const response = await fetch(`${API_URL}/municipios`, {
+          method: "POST",
+          body: JSON.stringify({ query }),
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          method: "POST",
-          body: JSON.stringify({ query: query }),
         });
         const data = await response.json();
         setSearchResultsMunicipio(data.data || data);
       } catch (error) {
-        console.error("Erro busca municipio:", error);
+        console.error("Erro ao buscar municípios", error);
       } finally {
         setLoadingSearch(false);
       }
@@ -190,74 +167,34 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
     [token]
   );
 
-  const searchBairros = useCallback(
-    async (query: string) => {
-      if (!selectedMunicipio) return;
-
-      setLoadingSearch(true);
-      try {
-        const response = await fetch(
-          `${API_URL}/bairros/${selectedMunicipio.id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            method: "POST",
-            body: JSON.stringify({ query: query }),
-          }
-        );
-        const data = await response.json();
-        setSearchResultsBairro(data.data || data);
-      } catch (error) {
-        console.error("Erro busca bairro:", error);
-      } finally {
-        setLoadingSearch(false);
-      }
-    },
-    [token, selectedMunicipio]
-  );
-
-  // --- HANDLERS ---
   const handleSelectMunicipio = (item: Municipio) => {
     setSelectedMunicipio(item);
     setModalMunicipioVisible(false);
-
-    // Resetar bairro ao trocar cidade
-    setSelectedBairro(null);
-    setSearchResultsBairro([]);
   };
 
-  const handleSelectBairro = (item: Bairro) => {
-    setSelectedBairro(item);
-    setModalBairroVisible(false);
-  };
-
+  // --- SALVAR ---
   const handleSave = async () => {
-    if (!nome || !selectedBairro) {
-      Alert.alert("Atenção", "Preencha o nome e selecione Cidade e Bairro.");
+    if (!nome || !selectedMunicipio) {
+      Alert.alert(
+        "Atenção",
+        "Preencha o nome do bairro e selecione um município."
+      );
       return;
     }
 
     setLoadingSave(true);
     try {
       const payload = {
-        nome,
-        documento: cpf || null,
-        telefone: telefone || null,
-        email: email || null,
-        endereco: endereco || null,
-        bairroId: selectedBairro.id,
-        status: "ATIVO",
-        latitude: latitude || 0,
-        longitude: longitude || 0,
+        nome: nome,
+        idMunicipio: selectedMunicipio.id,
+        status: statusAtivo ? "ATIVO" : "INATIVO",
       };
 
-      let url = `${API_URL}/clientes`;
+      let url = `${API_URL}/bairros`;
       let method = "POST";
 
-      if (isEditing && clienteEditar) {
-        url = `${API_URL}/clientes/${clienteEditar.id}`;
+      if (isEditing && bairroEditar) {
+        url = `${API_URL}/bairros/${bairroEditar.id}`;
         method = "PUT";
       }
 
@@ -270,15 +207,16 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) throw new Error("Erro na API");
+      if (!response.ok) throw new Error("Falha na requisição");
 
       Alert.alert(
         "Sucesso",
-        `Cliente ${isEditing ? "atualizado" : "cadastrado"}!`
+        `Bairro ${isEditing ? "atualizado" : "cadastrado"}!`
       );
       navigation.goBack();
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível salvar o cliente.");
+      Alert.alert("Erro", "Não foi possível salvar o bairro.");
+      console.error(error);
     } finally {
       setLoadingSave(false);
     }
@@ -294,9 +232,8 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
         >
           <ArrowLeft size={24} color="white" />
         </TouchableOpacity>
-        {/* Título Dinâmico */}
         <Text style={styles.headerTitle}>
-          {isEditing ? "Editar Cliente" : "Novo Cliente"}
+          {isEditing ? "Editar Bairro" : "Novo Bairro"}
         </Text>
         <View style={{ width: 40 }} />
       </View>
@@ -305,37 +242,24 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Dados Pessoais */}
+        {/* Dados do Bairro */}
         <View style={styles.section}>
-          <Text style={styles.label}>Nome Completo *</Text>
+          <Text style={styles.sectionTitle}>Dados do Bairro</Text>
+
+          <Text style={styles.label}>Nome do Bairro *</Text>
           <TextInput
             style={styles.input}
-            placeholder="Nome do cliente"
+            placeholder="Ex: Centro"
             value={nome}
             onChangeText={setNome}
           />
 
-          <Text style={styles.label}>Documento (CPF/CNPJ)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Informe o documento"
-            keyboardType="numeric"
-            value={cpf}
-            onChangeText={setCpf}
-          />
-        </View>
-
-        {/* Localização */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Localização</Text>
-
-          {/* MUNICÍPIO */}
-          <Text style={styles.label}>Município *</Text>
+          <Text style={styles.label}>Município Vinculado *</Text>
           <TouchableOpacity
             style={styles.selectButton}
             onPress={() => {
               setModalMunicipioVisible(true);
-              setSearchResultsMunicipio([]);
+              setSearchResultsMunicipio([]); // Limpa busca anterior
             }}
           >
             <Text
@@ -346,87 +270,39 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
             >
               {selectedMunicipio
                 ? `${selectedMunicipio.nome} - ${selectedMunicipio.uf}`
-                : "Selecione a cidade..."}
+                : "Selecione o município..."}
             </Text>
             <ChevronDown size={20} color="#666" />
           </TouchableOpacity>
-
-          {/* BAIRRO */}
-          <Text style={styles.label}>Bairro *</Text>
-          <TouchableOpacity
-            style={[
-              styles.selectButton,
-              !selectedMunicipio && styles.disabledButton,
-            ]}
-            onPress={() => {
-              if (selectedMunicipio) {
-                setModalBairroVisible(true);
-                searchBairros("");
-              } else {
-                Alert.alert("Atenção", "Selecione primeiro o município.");
-              }
-            }}
-            activeOpacity={selectedMunicipio ? 0.7 : 1}
-          >
-            <Text
-              style={[styles.selectText, !selectedBairro && { color: "#999" }]}
-            >
-              {selectedBairro ? selectedBairro.nome : "Selecione o bairro..."}
-            </Text>
-            <ChevronDown size={20} color="#666" />
-          </TouchableOpacity>
-
-          <Text style={styles.label}>Endereço</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Rua, Número, Complemento"
-            value={endereco}
-            onChangeText={setEndereco}
-          />
         </View>
 
+        {/* Status */}
         <View style={styles.section}>
-          <Text style={styles.label}>Telefone</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="(00) 00000-0000"
-            keyboardType="phone-pad"
-            value={telefone}
-            onChangeText={setTelefone}
-          />
-          <Text style={styles.label}>E-mail</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="email@exemplo.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={email}
-            onChangeText={setEmail}
-          />
-        </View>
+          <Text style={styles.sectionTitle}>Situação</Text>
 
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.label}>Latitude</Text>
-            <TextInput
-              style={[
-                styles.input,
-                { backgroundColor: "#F0F0F0", color: "#888" },
-              ]}
-              value={isEditing ? String(latitude ?? "---") : "Automático"}
-              editable={false}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.label}>Longitude</Text>
-            <TextInput
-              style={[
-                styles.input,
-                { backgroundColor: "#F0F0F0", color: "#888" },
-              ]}
-              value={isEditing ? String(longitude ?? "---") : "Automático"}
-              editable={false}
-            />
+          <View style={styles.switchContainer}>
+            <Text style={styles.switchLabel}>Status do Cadastro</Text>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+            >
+              <Text
+                style={{
+                  color: statusAtivo
+                    ? theme.colors.primary
+                    : theme.colors.mutedForeground,
+                  fontWeight: "bold",
+                }}
+              >
+                {statusAtivo ? "ATIVO" : "INATIVO"}
+              </Text>
+              <Switch
+                trackColor={{ false: "#767577", true: theme.colors.secondary }}
+                thumbColor={statusAtivo ? theme.colors.primary : "#f4f3f4"}
+                ios_backgroundColor="#3e3e3e"
+                onValueChange={setStatusAtivo}
+                value={statusAtivo}
+              />
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -443,37 +319,23 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
           ) : (
             <>
               <Check size={20} color="white" style={{ marginRight: 8 }} />
-              {/* Texto Dinâmico */}
               <Text style={styles.saveButtonText}>
-                {isEditing ? "Atualizar Cliente" : "Salvar Cliente"}
+                {isEditing ? "Atualizar Bairro" : "Salvar Bairro"}
               </Text>
             </>
           )}
         </TouchableOpacity>
       </View>
 
-      {/* Uso dos Modais */}
+      {/* Modal de Município */}
       <SearchModal
         visible={modalMunicipioVisible}
         onClose={() => setModalMunicipioVisible(false)}
         title="Buscar Município"
-        placeholder="Digite o nome da cidade..."
+        placeholder="Nome da cidade..."
         data={searchResultsMunicipio}
         onSearch={searchMunicipios}
         onSelect={handleSelectMunicipio}
-        loading={loadingSearch}
-      />
-
-      <SearchModal
-        visible={modalBairroVisible}
-        onClose={() => setModalBairroVisible(false)}
-        title={
-          selectedMunicipio ? `Bairros de ${selectedMunicipio.nome}` : "Bairros"
-        }
-        placeholder="Digite o nome do bairro..."
-        data={searchResultsBairro}
-        onSearch={searchBairros}
-        onSelect={handleSelectBairro}
         loading={loadingSearch}
       />
     </SafeAreaView>
@@ -534,12 +396,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#FAFAFA",
     height: 50,
   },
-  disabledButton: {
-    backgroundColor: "#E0E0E0",
-    borderColor: "#CCC",
-    opacity: 0.7,
-  },
   selectText: { fontSize: 16, color: "#333" },
+
+  // Switch Styles
+  switchContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  switchLabel: { fontSize: 16, color: "#333" },
+
+  // Footer
   footer: {
     position: "absolute",
     bottom: 0,

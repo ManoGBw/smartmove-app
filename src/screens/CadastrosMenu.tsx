@@ -1,12 +1,13 @@
-import { ArrowLeft, CreditCard, Package, Users } from "lucide-react-native";
-import React from "react";
 import {
-  Alert,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+  ArrowDownUp,
+  ArrowLeft,
+  CreditCard,
+  House,
+  Package,
+  Users,
+} from "lucide-react-native";
+import React from "react";
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { theme } from "../theme/colors";
 
@@ -39,6 +40,20 @@ const cadastroOptions = [
     icon: CreditCard,
     color: "#2E1E43",
   },
+  {
+    id: "bairros",
+    title: "Bairros",
+    subtitle: "Gerenciar bairros",
+    icon: House,
+    color: "#2E1E43",
+  },
+  {
+    id: "rotas",
+    title: "Rotas",
+    subtitle: "Gerenciar rotas",
+    icon: ArrowDownUp,
+    color: "#2E1E43",
+  },
 ];
 
 export function CadastrosMenu({ navigation }: CadastrosMenuProps) {
@@ -49,6 +64,12 @@ export function CadastrosMenu({ navigation }: CadastrosMenuProps) {
       navigation.navigate("CadastroProduto");
     } else if (optionId === "formas-pagamento") {
       navigation.navigate("CadastroFormaPagamento");
+    } else if (optionId === "bairros") {
+      if (true) {
+        navigation.navigate("CadastroBairro");
+      }
+    } else if (optionId === "rotas") {
+      navigation.navigate("CadastroRota");
     } else {
       Alert.alert("Acesso indisponível, entre em contato com o suporte");
     }

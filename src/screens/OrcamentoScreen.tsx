@@ -1,9 +1,8 @@
-// src/screens/OrcamentoScreen.tsx
-
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 import {
   ArrowLeft,
   Check,
-  FileText,
   Minus,
   Plus,
   Search,
@@ -15,8 +14,9 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  Modal, // <--- ADICIONADO
+  Modal,
   Platform,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,76 +24,101 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
-import { theme } from "../theme/colors";
 
-import * as Print from "expo-print";
-import * as Sharing from "expo-sharing";
-
+import { API_URL } from "../constants/config";
 import { useAuth } from "../context/AuthContext";
+import { theme } from "../theme/colors";
+import { Cliente, Orcamento, Produto } from "../types/interfaces";
 
-const API_URL = "http://72.60.12.191:3006/api/v1";
+// --- Interfaces ---
 
-interface Product {
-  id: number;
-  nome: string;
-  valorVenda: number;
-  estoque: number;
-  quantity?: number;
-}
-interface Client {
-  id: number;
-  nome: string;
-  cpf: string | null;
-  telefone: string | null;
+interface ProdutoSelecionado extends Produto {
+  quantity: number;
 }
 
 type OrcamentoScreenProps = {
   navigation: {
     goBack: () => void;
   };
+  route: {
+    params?: {
+      orcamento?: Orcamento;
+    };
+  };
 };
 
-export function OrcamentoScreen({ navigation }: OrcamentoScreenProps) {
+export function OrcamentoScreen({ navigation, route }: OrcamentoScreenProps) {
   const { token } = useAuth();
 
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  // Verifica se é edição
+  const orcamentoEditar = route.params?.orcamento;
+  const isEditing = !!orcamentoEditar;
+
+  // Estados
+  const [selectedClient, setSelectedClient] = useState<Cliente | null>(null);
   const [clientSearch, setClientSearch] = useState("");
-  const [selectedProducts, setSelectedProducts] = useState<Product[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<
+    ProdutoSelecionado[]
+  >([]);
   const [productSearch, setProductSearch] = useState("");
   const [showProductModal, setShowProductModal] = useState(false);
 
-  const [loadingClients, setLoadingClients] = useState(true);
-  const [loadingProducts, setLoadingProducts] = useState(true);
-  const [allClients, setAllClients] = useState<Client[]>([]);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [discount, setDiscount] = useState("");
+  const [observacoes, setObservacoes] = useState("");
+  const [status, setStatus] = useState("PENDENTE");
 
-  const [discount, setDiscount] = useState(""); // <--- ADICIONADO ESTADO
   const [loading, setLoading] = useState(false);
 
-  // --- ESTADO DE FOCO PARA SCROLL ---
-  const [isInputFocused, setIsInputFocused] = useState(false);
-  // ----------------------------------------------------
+  // Dados da API (Listas para busca)
+  const [allClients, setAllClients] = useState<Cliente[]>([]);
+  const [allProducts, setAllProducts] = useState<Produto[]>([]);
+  const [loadingClients, setLoadingClients] = useState(false);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
+  // --- POPULAR DADOS NA EDIÇÃO ---
+  useEffect(() => {
+    if (isEditing && orcamentoEditar) {
+      // 1. Preencher Cliente
+      setSelectedClient(orcamentoEditar.cliente);
+
+      // 2. Preencher Produtos (Mapeamento Crucial)
+      const produtosMapeados: ProdutoSelecionado[] = orcamentoEditar.itens.map(
+        (item) => ({
+          id: item.produto.id,
+          nome: item.produto.nome,
+          custo: item.produto.custo,
+          valorVenda: item.valorUnitario,
+          estoque: item.produto.estoque,
+          marca: item.produto.marca,
+          referencia: item.produto.referencia,
+          quantity: item.quantidade,
+          status: item.produto.status,
+        })
+      );
+      setSelectedProducts(produtosMapeados);
+
+      // 3. Preencher Valores e Status
+      setDiscount(
+        parseFloat(orcamentoEditar.desconto).toFixed(2).replace(".", ",")
+      );
+      setObservacoes(orcamentoEditar.observacoes || "");
+      setStatus(orcamentoEditar.status); // Preenche o status atual
+    }
+  }, [isEditing, orcamentoEditar]);
+
+  // --- BUSCAS NA API ---
   const fetchClients = useCallback(async () => {
     if (!token) return;
     setLoadingClients(true);
     try {
       const response = await fetch(`${API_URL}/clientes`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-      if (!response.ok) {
-        throw new Error("Não foi possível carregar os clientes.");
-      }
       const data = await response.json();
-      setAllClients(data);
-    } catch (error: any) {
-      Alert.alert("Erro ao buscar clientes", error.message);
+      setAllClients(Array.isArray(data) ? data : data.data || []);
+    } catch (error) {
+      Alert.alert("Erro", "Falha ao carregar clientes.");
     } finally {
       setLoadingClients(false);
     }
@@ -104,19 +129,19 @@ export function OrcamentoScreen({ navigation }: OrcamentoScreenProps) {
     setLoadingProducts(true);
     try {
       const response = await fetch(`${API_URL}/produtos`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-      if (!response.ok) {
-        throw new Error("Não foi possível carregar os produtos.");
-      }
       const data = await response.json();
-      setAllProducts(data);
-    } catch (error: any) {
-      Alert.alert("Erro ao buscar produtos", error.message);
+      // Normaliza para garantir numbers
+      const produtosFormatados = (
+        Array.isArray(data) ? data : data.data || []
+      ).map((p: any) => ({
+        ...p,
+        valorVenda: Number(p.valorVenda),
+      }));
+      setAllProducts(produtosFormatados);
+    } catch (error) {
+      Alert.alert("Erro", "Falha ao carregar produtos.");
     } finally {
       setLoadingProducts(false);
     }
@@ -127,247 +152,160 @@ export function OrcamentoScreen({ navigation }: OrcamentoScreenProps) {
     fetchProducts();
   }, [fetchClients, fetchProducts]);
 
+  // --- LÓGICA DE SELEÇÃO E CÁLCULOS ---
+
   const filteredClients = allClients.filter(
     (c) =>
       c.nome.toLowerCase().includes(clientSearch.toLowerCase()) ||
-      (c.cpf && c.cpf.includes(clientSearch))
-  );
-  // Mantido a filtragem por estoque > 0 apenas na modal de produtos, como no original.
-  const filteredProducts = allProducts.filter(
-    (p) =>
-      p.nome.toLowerCase().includes(productSearch.toLowerCase()) &&
-      p.estoque > 0
+      (c.documento && c.documento.includes(clientSearch))
   );
 
-  const handleSelectClient = (client: Client) => {
-    setSelectedClient(client);
-    setClientSearch("");
-  };
+  const filteredProducts = allProducts.filter((p) =>
+    p.nome.toLowerCase().includes(productSearch.toLowerCase())
+  );
 
-  const handleAddProduct = (product: Product) => {
-    const existing = selectedProducts.find((p) => p.id === product.id);
-    if (existing) {
-      if ((existing.quantity || 0) < product.estoque) {
-        setSelectedProducts((prev) =>
-          prev.map((p) =>
-            p.id === product.id ? { ...p, quantity: (p.quantity || 1) + 1 } : p
-          )
-        );
-        Toast.show({ type: "success", text1: "Quantidade atualizada" });
-      } else {
-        Toast.show({ type: "error", text1: "Estoque insuficiente" });
-      }
+  const handleAddProduct = (product: Produto) => {
+    const existingIndex = selectedProducts.findIndex(
+      (p) => p.id === product.id
+    );
+
+    if (existingIndex >= 0) {
+      // Se já existe, incrementa a quantidade
+      const updatedProducts = [...selectedProducts];
+      updatedProducts[existingIndex].quantity += 1;
+      setSelectedProducts(updatedProducts);
     } else {
-      setSelectedProducts((prev) => [...prev, { ...product, quantity: 1 }]);
-      Toast.show({ type: "success", text1: "Produto adicionado" });
+      // Se não existe, cria novo ProdutoSelecionado com quantity = 1
+      const newProduct: ProdutoSelecionado = {
+        ...product,
+        quantity: 1,
+      };
+      setSelectedProducts((prev) => [...prev, newProduct]);
     }
+    Toast.show({ type: "success", text1: "Produto adicionado" });
   };
 
   const handleUpdateQuantity = (productId: number, newQuantity: number) => {
-    const product = allProducts.find((p) => p.id === productId);
     if (newQuantity <= 0) {
       setSelectedProducts((prev) => prev.filter((p) => p.id !== productId));
-      Toast.show({ type: "info", text1: "Produto removido" });
-    } else if (product && newQuantity <= product.estoque) {
+    } else {
       setSelectedProducts((prev) =>
         prev.map((p) =>
           p.id === productId ? { ...p, quantity: newQuantity } : p
         )
       );
-    } else {
-      Toast.show({ type: "error", text1: "Estoque insuficiente" });
     }
   };
 
-  const handleRemoveProduct = (productId: number) => {
-    handleUpdateQuantity(productId, 0);
+  // Cálculos Financeiros
+  const parseCurrency = (val: string) => {
+    if (!val) return 0;
+    return parseFloat(val.replace(/\./g, "").replace(",", ".")) || 0;
   };
 
-  // Funções de Cálculo (Copiado de RealizarVenda.tsx)
-  const parseCurrency = (value: string): number => {
-    if (!value) return 0;
-    // Remove o separador de milhar e troca a vírgula por ponto
-    const numberString = value.replace(/\./g, "").replace(",", ".");
-    return parseFloat(numberString) || 0;
-  };
-  const formatCurrency = (value: number): string =>
-    (parseFloat(String(value)) || 0).toFixed(2).replace(".", ",");
+  const discountValue = parseCurrency(discount);
 
-  const getDiscountValue = () => parseCurrency(discount);
-
-  // CÁLCULO TOTAL
   const subtotal = selectedProducts.reduce(
-    (sum, p) =>
-      sum + (parseFloat(String(p.valorVenda)) || 0) * (p.quantity || 1),
+    (sum, p) => sum + Number(p.valorVenda) * (p.quantity || 1),
     0
   );
-  const total = subtotal - getDiscountValue();
 
-  // --- FUNÇÃO PARA GERAR HTML DO PDF (MODIFICADA) ---
-  const createHtmlForQuotePdf = (
-    client: Client,
-    products: Product[],
-    discount: number,
-    subtotal: number,
-    totalValue: number
-  ) => {
-    const productRows = products
-      .map(
-        (p) => `
-    <tr>
-      <td>${p.nome}</td>
-      <td>${p.quantity}</td>
-      <td>R$ ${formatCurrency(p.valorVenda)}</td>
-      <td>R$ ${formatCurrency(p.valorVenda * (p.quantity || 1))}</td>
-    </tr>
-  `
-      )
-      .join("");
+  const total = subtotal - discountValue;
 
-    return `
-    <html>
-      <head>
-        <style>
-          body { font-family: sans-serif; padding: 20px; }
-          h1 { color: ${theme.colors.primary}; }
-          h2 { color: ${
-            theme.colors.secondary
-          }; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-          h3 { color: #333; }
-          p { color: #555; }
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 20px; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: ${theme.colors.muted}; color: ${
-      theme.colors.primary
-    }; }
-          .summary { margin-top: 10px; font-size: 1.1em; }
-          .summary-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
-          .total { font-weight: bold; color: ${theme.colors.primary}; }
-        </style>
-      </head>
-      <body>
-        <h1>Smart Move Orçamentos</h1>
-        <h2>Detalhes do Orçamento</h2>
-
-        <h3>Cliente:</h3>
-        <p>
-          <strong>Nome:</strong> ${client.nome}<br/>
-          <strong>CPF:</strong> ${client.cpf || "Não informado"}<br/>
-          <strong>Telefone:</strong> ${client.telefone || "Não informado"}
-        </p>
-
-        <h3>Itens Orçados:</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Produto</th>
-              <th>Qtd.</th>
-              <th>Valor Unit.</th>
-              <th>Subtotal</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${productRows}
-          </tbody>
-        </table>
-
-        <h3>Resumo do Orçamento:</h3>
-        <div class="summary">
-          <div class="summary-row"><span>Subtotal:</span><span>R$ ${formatCurrency(
-            subtotal
-          )}</span></div>
-          ${
-            discount > 0
-              ? `<div class="summary-row" style="color: ${
-                  theme.colors.destructive
-                }"><span>Desconto:</span><span>- R$ ${formatCurrency(
-                  discount
-                )}</span></div>`
-              : ""
-          }
-          <div class="summary-row total" style="border-top: 1px solid #ddd; padding-top: 5px; margin-top: 5px;"><span>Valor Total Estimado:</span><span>R$ ${formatCurrency(
-            totalValue
-          )}</span></div>
-        </div>
-      </body>
-    </html>
-  `;
-  };
-
-  // --- FUNÇÃO PARA GERAR PDF E COMPARTILHAR ---
-  const handleGeneratePDFAndShare = async (quoteDetails: {
-    client: Client;
-    products: Product[];
-    discount: number;
-    subtotal: number;
-    totalValue: number;
-  }) => {
-    if (!(await Sharing.isAvailableAsync())) {
-      Alert.alert(
-        "Erro",
-        "O compartilhamento não está disponível neste dispositivo."
-      );
-      return;
-    }
-
+  // --- GERAÇÃO DE PDF ---
+  const generatePDF = async () => {
     try {
-      const htmlContent = createHtmlForQuotePdf(
-        quoteDetails.client,
-        quoteDetails.products,
-        quoteDetails.discount,
-        quoteDetails.subtotal,
-        quoteDetails.totalValue
-      );
+      const htmlContent = `
+        <html>
+          <head>
+            <style>
+              body { font-family: Helvetica, sans-serif; padding: 20px; }
+              h1 { color: ${theme.colors.primary}; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #f2f2f2; }
+              .total { margin-top: 20px; font-size: 18px; font-weight: bold; text-align: right; }
+              .status { font-weight: bold; color: #555; }
+            </style>
+          </head>
+          <body>
+            <h1>Orçamento #${isEditing ? orcamentoEditar?.id : "NOVO"}</h1>
+            <p><strong>Cliente:</strong> ${selectedClient?.nome}</p>
+            <p><strong>Data:</strong> ${new Date().toLocaleDateString()}</p>
+            <p class="status">Status: ${status}</p>
+            
+            <table>
+              <tr><th>Produto</th><th>Qtd</th><th>Unit.</th><th>Total</th></tr>
+              ${selectedProducts
+                .map(
+                  (p) => `
+                <tr>
+                  <td>${p.nome}</td>
+                  <td>${p.quantity}</td>
+                  <td>R$ ${Number(p.valorVenda)
+                    .toFixed(2)
+                    .replace(".", ",")}</td>
+                  <td>R$ ${(Number(p.valorVenda) * p.quantity)
+                    .toFixed(2)
+                    .replace(".", ",")}</td>
+                </tr>
+              `
+                )
+                .join("")}
+            </table>
+            
+            <div class="total">
+              <p>Subtotal: R$ ${subtotal.toFixed(2).replace(".", ",")}</p>
+              <p>Desconto: - R$ ${discountValue
+                .toFixed(2)
+                .replace(".", ",")}</p>
+              <p>Total Final: R$ ${total.toFixed(2).replace(".", ",")}</p>
+            </div>
+          </body>
+        </html>
+      `;
 
-      const { uri } = await Print.printToFileAsync({
-        html: htmlContent,
-        base64: false,
-        margins: { top: 30, right: 20, bottom: 20, left: 20 },
-      });
-
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
       await Sharing.shareAsync(uri, {
-        mimeType: "application/pdf",
-        dialogTitle: "Compartilhar Orçamento",
         UTI: ".pdf",
+        mimeType: "application/pdf",
       });
     } catch (error) {
-      console.error("Erro ao gerar/compartilhar PDF:", error);
-      Alert.alert("Erro", "Não foi possível gerar e compartilhar o PDF.");
+      Alert.alert("Erro", "Não foi possível gerar o PDF.");
     }
   };
-  // ------------------------------------------------------------------
 
-  // --- FUNÇÃO DE FINALIZAÇÃO (CONSOLIDADA) ---
-  const handleFinalizeOrcamento = async () => {
-    if (loading) return;
-
-    if (!selectedClient) {
-      Alert.alert("Atenção", "Selecione o cliente.");
-      return;
-    }
-    if (selectedProducts.length === 0) {
-      Alert.alert("Atenção", "Adicione pelo menos um produto.");
+  // --- SALVAR ORÇAMENTO ---
+  const handleSaveOrcamento = async () => {
+    if (!selectedClient || selectedProducts.length === 0) {
+      Alert.alert("Atenção", "Selecione cliente e produtos.");
       return;
     }
 
     setLoading(true);
-
     try {
       const payload = {
-        clienteId: selectedClient!.id,
+        clienteId: selectedClient.id,
         itens: selectedProducts.map((p) => ({
           produtoId: p.id,
           quantidade: p.quantity,
           valorUnitario: p.valorVenda,
         })),
-        observacoes: "Orçamento gerado pelo app Smart Move",
-        desconto: getDiscountValue(),
-        status: "PENDENTE",
+        observacoes: observacoes || "Orçamento gerado pelo App",
+        desconto: discountValue,
+        status: status, // Envia o status selecionado
       };
 
-      // 1. CHAMA API (Salva o Orçamento)
-      const response = await fetch(`${API_URL}/orcamentos`, {
-        method: "POST",
+      let url = `${API_URL}/orcamentos`;
+      let method = "POST";
+
+      if (isEditing && orcamentoEditar) {
+        url = `${API_URL}/orcamentos/${orcamentoEditar.id}`;
+        method = "PUT";
+      }
+
+      const response = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -375,35 +313,48 @@ export function OrcamentoScreen({ navigation }: OrcamentoScreenProps) {
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      const responseData = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Não foi possível salvar o orçamento.");
+        throw new Error(responseData.message || "Erro ao salvar");
       }
 
-      // 2. GERA PDF E ABRE COMPARTILHAMENTO
-      await handleGeneratePDFAndShare({
-        client: selectedClient!,
-        products: selectedProducts,
-        discount: getDiscountValue(),
-        subtotal: subtotal,
-        totalValue: total,
-      });
-
-      // 3. FINALIZAÇÃO DA TELA
-      Toast.show({
-        type: "success",
-        text1: "Orçamento finalizado e pronto para compartilhar!",
-      });
-      setTimeout(() => navigation.goBack(), 1500);
-    } catch (error: any) {
-      console.error("Erro ao finalizar orçamento:", error);
       Alert.alert(
-        "Erro no Orçamento",
-        error.message || "Ocorreu um erro inesperado ao salvar o orçamento."
+        "Sucesso",
+        `Orçamento ${isEditing ? "atualizado" : "criado"}!`,
+        [
+          { text: "Gerar PDF", onPress: generatePDF },
+          {
+            text: "Sair",
+            onPress: () => navigation.goBack(),
+            style: "cancel",
+          },
+        ]
       );
+    } catch (error: any) {
+      Alert.alert("Erro", error.message || "Falha ao salvar orçamento.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getStatusButtonStyle = (optionStatus: string) => {
+    switch (optionStatus) {
+      case "APROVADO":
+        return {
+          backgroundColor: theme.colors.primary || "green",
+          borderColor: theme.colors.primary || "green",
+        };
+      case "CANCELADO":
+        return {
+          backgroundColor: theme.colors.destructive,
+          borderColor: theme.colors.destructive,
+        };
+      default:
+        return {
+          backgroundColor: theme.colors.caution,
+          borderColor: theme.colors.caution,
+        };
     }
   };
 
@@ -412,73 +363,60 @@ export function OrcamentoScreen({ navigation }: OrcamentoScreenProps) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          style={styles.headerButton}
           onPress={() => navigation.goBack()}
+          style={{ padding: 8 }}
         >
-          <ArrowLeft size={24} color={theme.colors.primaryForeground} />
+          <ArrowLeft size={24} color="white" />
         </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <FileText size={20} color={theme.colors.primaryForeground} />
-          <Text style={styles.headerTitle}>Gerar Orçamento</Text>
-        </View>
+        <Text style={styles.headerTitle}>
+          {isEditing
+            ? `Editar Orçamento #${orcamentoEditar?.id}`
+            : "Novo Orçamento"}
+        </Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      {/* CONTAINER PRINCIPAL: KeyboardAvoidingView */}
       <KeyboardAvoidingView
-        style={styles.contentContainer}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContainer}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Cliente */}
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {/* Seleção de Cliente */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Cliente *</Text>
             {!selectedClient ? (
               <>
-                <View style={styles.searchInputContainer}>
-                  <Search
-                    size={20}
-                    color={theme.colors.foreground}
-                    style={styles.searchIcon}
-                  />
+                <View style={styles.searchContainer}>
+                  <Search size={20} color="#666" style={{ marginRight: 8 }} />
                   <TextInput
-                    style={styles.searchInput}
-                    placeholder="Buscar cliente por nome ou CPF..."
+                    style={styles.input}
+                    placeholder="Buscar cliente..."
                     value={clientSearch}
                     onChangeText={setClientSearch}
                   />
                 </View>
-                {loadingClients ? (
-                  <ActivityIndicator style={{ marginVertical: 10 }} />
-                ) : clientSearch.length > 0 ? (
-                  <View>
-                    {filteredClients.map((c) => (
-                      <TouchableOpacity
-                        key={c.id}
-                        style={styles.searchResult}
-                        onPress={() => handleSelectClient(c)}
-                      >
-                        <Text style={styles.searchResultText}>{c.nome}</Text>
-                        <Text style={styles.searchResultSubtext}>
-                          CPF: {c.cpf || "Não informado"}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                {clientSearch.length > 0 && (
+                  <View style={{ maxHeight: 150 }}>
+                    <ScrollView nestedScrollEnabled>
+                      {filteredClients.map((c) => (
+                        <TouchableOpacity
+                          key={c.id}
+                          onPress={() => {
+                            setSelectedClient(c);
+                            setClientSearch("");
+                          }}
+                          style={styles.searchItem}
+                        >
+                          <Text>{c.nome}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
                   </View>
-                ) : null}
+                )}
               </>
             ) : (
-              <View style={styles.selectedItemContainer}>
-                <View>
-                  <Text style={styles.selectedItemText}>
-                    {selectedClient.nome}
-                  </Text>
-                  <Text style={styles.selectedItemSubtext}>
-                    CPF: {selectedClient.cpf || "Não informado"}
-                  </Text>
-                </View>
+              <View style={styles.selectedRow}>
+                <Text style={styles.selectedText}>{selectedClient.nome}</Text>
                 <TouchableOpacity onPress={() => setSelectedClient(null)}>
                   <X size={20} color={theme.colors.destructive} />
                 </TouchableOpacity>
@@ -486,47 +424,50 @@ export function OrcamentoScreen({ navigation }: OrcamentoScreenProps) {
             )}
           </View>
 
-          {/* Produtos */}
+          {/* Lista de Produtos */}
           <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Produtos *</Text>
+            <View style={styles.rowBetween}>
+              <Text style={styles.cardTitle}>Itens</Text>
               <TouchableOpacity
-                style={styles.addButton}
                 onPress={() => setShowProductModal(true)}
+                style={styles.addButton}
               >
                 <Plus size={16} color="white" />
-                <Text style={styles.addButtonText}>Adicionar</Text>
+                <Text style={{ color: "white", marginLeft: 4 }}>Adicionar</Text>
               </TouchableOpacity>
             </View>
+
             {selectedProducts.length === 0 ? (
-              <Text style={styles.emptyText}>Nenhum produto adicionado.</Text>
+              <Text style={styles.emptyText}>Nenhum item adicionado.</Text>
             ) : (
               selectedProducts.map((p) => (
                 <View key={p.id} style={styles.productItem}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.productName}>{p.nome}</Text>
-                    <Text style={styles.productDetails}>
-                      R$ {formatCurrency(p.valorVenda)} x {p.quantity}
+                    <Text style={styles.productDetail}>
+                      {p.quantity} x R${" "}
+                      {Number(p.valorVenda).toFixed(2).replace(".", ",")}
                     </Text>
                   </View>
-                  <View style={styles.quantityControl}>
+                  <View style={styles.qtyControls}>
                     <TouchableOpacity
-                      onPress={() =>
-                        handleUpdateQuantity(p.id, (p.quantity || 1) - 1)
-                      }
+                      onPress={() => handleUpdateQuantity(p.id, p.quantity - 1)}
                     >
                       <Minus size={18} color={theme.colors.primary} />
                     </TouchableOpacity>
-                    <Text style={styles.quantityText}>{p.quantity}</Text>
+                    <Text style={{ marginHorizontal: 8, fontSize: 16 }}>
+                      {p.quantity}
+                    </Text>
                     <TouchableOpacity
-                      onPress={() =>
-                        handleUpdateQuantity(p.id, (p.quantity || 1) + 1)
-                      }
+                      onPress={() => handleUpdateQuantity(p.id, p.quantity + 1)}
                     >
                       <Plus size={18} color={theme.colors.primary} />
                     </TouchableOpacity>
                   </View>
-                  <TouchableOpacity onPress={() => handleRemoveProduct(p.id)}>
+                  <TouchableOpacity
+                    onPress={() => handleUpdateQuantity(p.id, 0)}
+                    style={{ marginLeft: 10 }}
+                  >
                     <Trash2 size={20} color={theme.colors.destructive} />
                   </TouchableOpacity>
                 </View>
@@ -534,150 +475,162 @@ export function OrcamentoScreen({ navigation }: OrcamentoScreenProps) {
             )}
           </View>
 
-          {/* Desconto */}
-          {selectedProducts.length > 0 && (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Desconto e Resumo</Text>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Desconto (R$)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="0,00"
-                  value={discount}
-                  onChangeText={setDiscount}
-                  keyboardType="numeric"
-                  onFocus={() => setIsInputFocused(true)}
-                  onBlur={() => setIsInputFocused(false)}
-                />
-              </View>
+          {/* Detalhes, Status e Totais */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Detalhes</Text>
 
-              {/* Resumo */}
-              <View>
-                <View style={styles.summaryRow}>
-                  <Text>Subtotal</Text>
-                  <Text>R$ {formatCurrency(subtotal)}</Text>
-                </View>
-                {getDiscountValue() > 0 && (
-                  <View style={styles.summaryRow}>
-                    <Text style={{ color: theme.colors.destructive }}>
-                      Desconto
-                    </Text>
-                    <Text style={{ color: theme.colors.destructive }}>
-                      - R$ {formatCurrency(getDiscountValue())}
-                    </Text>
-                  </View>
-                )}
-                <View
+            {/* Seletor de Status */}
+            <Text style={styles.label}>Situação</Text>
+            <View style={styles.statusContainer}>
+              {["PENDENTE", "APROVADO", "CANCELADO"].map((option) => (
+                <TouchableOpacity
+                  key={option}
                   style={[
-                    styles.summaryRow,
-                    {
-                      borderTopWidth: 1,
-                      borderColor: "#eee",
-                      paddingTop: 10,
-                      marginTop: 10,
-                    },
+                    styles.statusButton,
+                    status === option && getStatusButtonStyle(option),
+                  ]}
+                  onPress={() => setStatus(option)}
+                >
+                  <Text
+                    style={[
+                      styles.statusText,
+                      status === option && styles.statusTextActive,
+                    ]}
+                  >
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.label}>Observações</Text>
+            <TextInput
+              style={styles.textArea}
+              placeholder="Ex: Validade de 10 dias..."
+              multiline
+              numberOfLines={3}
+              value={observacoes}
+              onChangeText={setObservacoes}
+            />
+
+            <Text style={styles.label}>Desconto (R$)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="0,00"
+              keyboardType="numeric"
+              value={discount}
+              onChangeText={setDiscount}
+            />
+
+            <View style={styles.summary}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.summaryLabel}>Subtotal:</Text>
+                <Text style={styles.summaryValue}>
+                  R$ {subtotal.toFixed(2).replace(".", ",")}
+                </Text>
+              </View>
+              <View style={styles.rowBetween}>
+                <Text
+                  style={[
+                    styles.summaryLabel,
+                    { color: theme.colors.destructive },
                   ]}
                 >
-                  <Text style={styles.totalText}>Total Estimado</Text>
-                  <Text style={styles.totalText}>
-                    R$ {formatCurrency(total)}
-                  </Text>
-                </View>
+                  Desconto:
+                </Text>
+                <Text
+                  style={[
+                    styles.summaryValue,
+                    { color: theme.colors.destructive },
+                  ]}
+                >
+                  - R$ {discountValue.toFixed(2).replace(".", ",")}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.rowBetween,
+                  {
+                    marginTop: 10,
+                    borderTopWidth: 1,
+                    borderTopColor: "#EEE",
+                    paddingTop: 10,
+                  },
+                ]}
+              >
+                <Text style={styles.totalLabel}>TOTAL:</Text>
+                <Text style={styles.totalValue}>
+                  R$ {total.toFixed(2).replace(".", ",")}
+                </Text>
               </View>
             </View>
-          )}
+          </View>
         </ScrollView>
 
-        {/* Rodapé Fixo (MODIFICADO) */}
-        {selectedProducts.length > 0 && (
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={[
-                styles.finalizeButton,
-                { flex: 1, backgroundColor: theme.colors.primary }, // <--- Botão ocupa todo o espaço
-                (loading || !selectedClient || selectedProducts.length === 0) &&
-                  styles.finalizeButtonDisabled,
-              ]}
-              onPress={handleFinalizeOrcamento} // <--- Chama a função unificada
-              disabled={
-                loading || !selectedClient || selectedProducts.length === 0
-              }
-            >
-              {loading ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <>
-                  <Check size={20} color="white" />
-                  <Text style={styles.finalizeButtonText}>
-                    Finalizar Orçamento - R$ {formatCurrency(total)}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Footer Fixo */}
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[styles.saveButton, loading && { opacity: 0.7 }]}
+            onPress={handleSaveOrcamento}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <>
+                <Check size={20} color="white" style={{ marginRight: 8 }} />
+                <Text style={styles.saveButtonText}>
+                  {isEditing ? "Salvar Alterações" : "Finalizar Orçamento"}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
 
       {/* Modal de Produtos */}
       <Modal
         visible={showProductModal}
         animationType="slide"
-        transparent={true}
+        transparent
         onRequestClose={() => setShowProductModal(false)}
       >
-        <View style={styles.modalContainer}>
+        <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Adicionar Produtos</Text>
-            <View style={styles.searchInputContainer}>
-              <Search
-                size={20}
-                color={theme.colors.foreground}
-                style={styles.searchIcon}
-              />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Adicionar Produtos</Text>
+              <TouchableOpacity onPress={() => setShowProductModal(false)}>
+                <X size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.searchContainer}>
+              <Search size={20} color="#666" style={{ marginRight: 8 }} />
               <TextInput
-                style={styles.searchInput}
+                style={styles.input}
                 placeholder="Buscar produto..."
                 value={productSearch}
                 onChangeText={setProductSearch}
               />
             </View>
+
             <ScrollView>
-              {loadingProducts ? (
-                <ActivityIndicator style={{ marginVertical: 10 }} />
-              ) : (
-                allProducts
-                  .filter(
-                    (p) =>
-                      p.nome
-                        .toLowerCase()
-                        .includes(productSearch.toLowerCase()) && p.estoque > 0
-                  )
-                  .map((p) => (
-                    <View key={p.id} style={styles.modalProductItem}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.productName}>{p.nome}</Text>
-                        <Text style={styles.productDetails}>
-                          R$ {formatCurrency(p.valorVenda)} | Estoque:{" "}
-                          {p.estoque}
-                        </Text>
-                      </View>
-                      <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={() => handleAddProduct(p)}
-                      >
-                        <Plus size={16} color="white" />
-                        <Text style={styles.addButtonText}>Adicionar</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))
-              )}
+              {filteredProducts.map((p) => (
+                <TouchableOpacity
+                  key={p.id}
+                  style={styles.productItem}
+                  onPress={() => handleAddProduct(p)}
+                >
+                  <View>
+                    <Text style={styles.productName}>{p.nome}</Text>
+                    <Text style={styles.productDetail}>
+                      R$ {Number(p.valorVenda).toFixed(2).replace(".", ",")}
+                    </Text>
+                  </View>
+                  <Plus size={20} color={theme.colors.primary} />
+                </TouchableOpacity>
+              ))}
             </ScrollView>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setShowProductModal(false)}
-            >
-              <Text style={styles.closeButtonText}>Fechar</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -685,195 +638,176 @@ export function OrcamentoScreen({ navigation }: OrcamentoScreenProps) {
   );
 }
 
-// --- Estilos ---
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  contentContainer: { flex: 1 },
+  container: { flex: 1, backgroundColor: "#F2F2F2" },
   header: {
+    backgroundColor: theme.colors.primary,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: theme.colors.primary,
+    justifyContent: "space-between",
     padding: 16,
-    paddingTop: 20,
+    paddingTop: 40,
   },
-  headerButton: { padding: 8 },
-  headerTitleContainer: { flexDirection: "row", alignItems: "center", gap: 8 },
-  headerTitle: {
-    color: theme.colors.primaryForeground,
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  scrollContainer: { padding: 16, paddingBottom: 100 },
+  headerTitle: { color: "white", fontSize: 18, fontWeight: "bold" },
+  scrollContent: { padding: 16, paddingBottom: 100 },
+
   card: {
     backgroundColor: "white",
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
     elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
     color: theme.colors.primary,
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  searchInputContainer: {
+
+  searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: theme.colors.inputBackground,
+    backgroundColor: "#FAFAFA",
+    borderWidth: 1,
+    borderColor: "#DDD",
     borderRadius: 8,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
+    marginBottom: 8,
   },
-  searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, height: 45, fontSize: 16 },
-  searchResult: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  searchResultText: { fontSize: 16, color: theme.colors.primary },
-  searchResultSubtext: { fontSize: 12, color: theme.colors.foreground },
-  selectedItemContainer: {
+  input: { flex: 1, height: 45, fontSize: 16 },
+  searchItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: "#EEE" },
+
+  selectedRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "rgba(165, 164, 224, 0.1)",
+    backgroundColor: "#EEF",
     padding: 12,
     borderRadius: 8,
   },
-  selectedItemText: {
+  selectedText: {
     fontSize: 16,
     fontWeight: "500",
     color: theme.colors.primary,
   },
-  selectedItemSubtext: { fontSize: 12, color: theme.colors.foreground },
+
+  rowBetween: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   addButton: {
+    backgroundColor: theme.colors.secondary,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: theme.colors.secondary,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
   },
-  addButtonText: { color: "white", fontWeight: "bold" },
-  emptyText: {
-    textAlign: "center",
-    color: theme.colors.foreground,
-    paddingVertical: 20,
-  },
+  emptyText: { textAlign: "center", color: "#999", marginVertical: 20 },
+
   productItem: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-    gap: 10,
+    borderBottomColor: "#EEE",
   },
-  productName: { fontSize: 15, color: theme.colors.primary, flexWrap: "wrap" },
-  productDetails: { fontSize: 12, color: theme.colors.foreground },
-  quantityControl: {
+  productName: { fontSize: 15, color: "#333" },
+  productDetail: { fontSize: 13, color: "#666" },
+  qtyControls: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: theme.colors.inputBackground,
-    borderRadius: 8,
+    backgroundColor: "#F5F5F5",
+    borderRadius: 4,
     padding: 4,
-    gap: 12,
   },
-  quantityText: { fontSize: 16, fontWeight: "bold" },
-  inputGroup: { marginBottom: 16 },
+
   label: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "500",
-    color: theme.colors.primary,
-    marginBottom: 8,
+    color: "#333",
+    marginTop: 12,
+    marginBottom: 4,
   },
-  input: {
-    backgroundColor: theme.colors.inputBackground,
+  textArea: {
+    backgroundColor: "#FAFAFA",
     borderWidth: 1,
-    borderColor: "#E8E8EB",
+    borderColor: "#DDD",
     borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#000",
+    padding: 10,
+    textAlignVertical: "top",
   },
-  summaryRow: {
+
+  // --- Estilos do Seletor de Status ---
+  statusContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 4,
+    gap: 8,
+    marginBottom: 12,
   },
-  totalText: { fontSize: 18, fontWeight: "bold", color: theme.colors.primary },
+  statusButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#DDD",
+    backgroundColor: "#FAFAFA",
+    alignItems: "center",
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#666",
+  },
+  statusTextActive: {
+    color: "white",
+  },
+
+  summary: { marginTop: 20 },
+  summaryLabel: { fontSize: 14, color: "#666" },
+  summaryValue: { fontSize: 14, fontWeight: "bold", color: "#333" },
+  totalLabel: { fontSize: 18, fontWeight: "bold", color: theme.colors.primary },
+  totalValue: { fontSize: 18, fontWeight: "bold", color: theme.colors.primary },
+
   footer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: "white",
-    borderTopWidth: 1,
-    borderTopColor: "#E8E8EB",
     padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#DDD",
   },
-  footerButtonContainer: {
+  saveButton: {
+    backgroundColor: theme.colors.primary,
     flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  finalizeButton: {
-    height: 55,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
     borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 15,
   },
-  finalizeButtonDisabled: { opacity: 0.5 },
-  finalizeButtonText: { color: "white", fontSize: 16, fontWeight: "bold" },
-  modalContainer: {
+  saveButtonText: { color: "white", fontSize: 16, fontWeight: "bold" },
+
+  // Modal
+  modalOverlay: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
   },
   modalContent: {
-    width: "90%",
-    maxHeight: "80%",
     backgroundColor: "white",
+    margin: 20,
     borderRadius: 12,
-    padding: 20,
-    elevation: 10,
+    padding: 16,
+    maxHeight: "80%",
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: theme.colors.primary,
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 16,
   },
-  modalProductItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  closeButton: {
-    backgroundColor: theme.colors.muted,
-    padding: 15,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 16,
-  },
-  closeButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: theme.colors.primary,
-  },
+  modalTitle: { fontSize: 18, fontWeight: "bold", color: theme.colors.primary },
 });

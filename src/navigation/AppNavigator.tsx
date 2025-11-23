@@ -4,19 +4,26 @@ import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "../context/AuthContext";
 
 import { AjusteEstoqueScreen } from "../screens/AjusteEstoqueScreen";
+import { CadastroBairro } from "../screens/CadastroBairro";
 import { CadastroCliente } from "../screens/CadastroCliente";
 import { CadastroFormaPagamento } from "../screens/CadastroFormaPagamento";
 import { CadastroProduto } from "../screens/CadastroProduto";
+import { CadastroRota } from "../screens/CadastroRota";
 import { CadastrosMenu } from "../screens/CadastrosMenu";
+import { ConsultaBairro } from "../screens/ConsultaBairro";
 import { ConsultaCliente } from "../screens/ConsultaCliente";
 import { ConsultaMenu } from "../screens/ConsultaMenu";
+import { ConsultaOrcamento } from "../screens/ConsultaOrcamento";
+import { ConsultaRota } from "../screens/ConsultaRota";
 import { Dashboard } from "../screens/Dashboard";
 import { EstoqueScreen } from "../screens/EstoqueScreen";
 import { ForgotPasswordScreen } from "../screens/ForgotPassword";
 import { LoginScreen } from "../screens/LoginScreen";
 import { OrcamentoScreen } from "../screens/OrcamentoScreen";
+import { PlanejamentoRotas } from "../screens/PlanejamentoRotas";
 import { RealizarVenda } from "../screens/RealizarVenda";
 import { RegisterScreen } from "../screens/RegisterScreen";
+import { RelatoriosScreen } from "../screens/RelatoriosScreen";
 
 const AuthStack = createStackNavigator();
 const AppStack = createStackNavigator();
@@ -45,6 +52,13 @@ const AppRoutes = () => (
     <AppStack.Screen name="RealizarVenda" component={RealizarVenda} />
     <AppStack.Screen name="OrcamentoScreen" component={OrcamentoScreen} />
     <AppStack.Screen name="EstoqueScreen" component={EstoqueScreen} />
+    <AppStack.Screen name="CadastroBairro" component={CadastroBairro} />
+    <AppStack.Screen name="ConsultaBairro" component={ConsultaBairro} />
+    <AppStack.Screen name="ConsultaRota" component={ConsultaRota} />
+    <AppStack.Screen name="CadastroRota" component={CadastroRota} />
+    <AppStack.Screen name="PlanejamentoRotas" component={PlanejamentoRotas} />
+    <AppStack.Screen name="RelatoriosScreen" component={RelatoriosScreen} />
+    <AppStack.Screen name="ConsultaOrcamento" component={ConsultaOrcamento} />
   </AppStack.Navigator>
 );
 
