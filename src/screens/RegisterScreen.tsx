@@ -1,12 +1,4 @@
-import {
-  ArrowLeft,
-  Eye,
-  EyeOff,
-  Lock,
-  Mail,
-  Phone,
-  User,
-} from "lucide-react-native";
+import { ArrowLeft, Eye, EyeOff, Lock, Mail } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -32,9 +24,7 @@ type RegisterScreenProps = {
 
 export function RegisterScreen({ navigation }: RegisterScreenProps) {
   const [formData, setFormData] = useState({
-    name: "",
     email: "",
-    phone: "",
     password: "",
     confirmPassword: "",
   });
@@ -49,12 +39,7 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
   // --- FUNÇÃO DE REGISTRO ATUALIZADA ---
   const handleRegister = async () => {
     // 1. Validação dos campos
-    if (
-      !formData.name ||
-      !formData.email ||
-      !formData.password ||
-      !formData.confirmPassword
-    ) {
+    if (!formData.email || !formData.password || !formData.confirmPassword) {
       Alert.alert(
         "Atenção",
         "Por favor, preencha todos os campos obrigatórios."
@@ -123,25 +108,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
 
         <Card>
           <CardContent>
-            {/* --- Os campos do formulário continuam os mesmos --- */}
-            {/* Nome Completo */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nome completo</Text>
-              <View style={styles.inputContainer}>
-                <User
-                  color={theme.colors.foreground}
-                  size={16}
-                  style={styles.icon}
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Seu nome"
-                  value={formData.name}
-                  onChangeText={(text) => handleInputChange("name", text)}
-                  placeholderTextColor={theme.colors.foreground}
-                />
-              </View>
-            </View>
             {/* E-mail */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>E-mail</Text>
@@ -158,25 +124,6 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
                   onChangeText={(text) => handleInputChange("email", text)}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  placeholderTextColor={theme.colors.foreground}
-                />
-              </View>
-            </View>
-            {/* Telefone (opcional pela API, mas mantemos no form) */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Telefone</Text>
-              <View style={styles.inputContainer}>
-                <Phone
-                  color={theme.colors.foreground}
-                  size={16}
-                  style={styles.icon}
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder="(11) 99999-9999"
-                  value={formData.phone}
-                  onChangeText={(text) => handleInputChange("phone", text)}
-                  keyboardType="phone-pad"
                   placeholderTextColor={theme.colors.foreground}
                 />
               </View>
