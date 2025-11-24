@@ -70,3 +70,4 @@ src/
 - `npx expo start --tunnel` : inicia fora da tere de interna
 - `npm install react-native-toast-message` - instalar biblioteca de mensagens de feedback
 - `npx expo install expo-print npx expo install expo-sharing` - instalar biblioteca para gerar PDF
+- `npx expo install expo-build-properties` - Instalar pluggin necessario para rodar api sem certificado SSL

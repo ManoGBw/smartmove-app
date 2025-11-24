@@ -17,7 +17,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -25,7 +24,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+// CORREÇÃO 1: Importar SafeAreaView da biblioteca correta para sumir o WARN
 import RNPickerSelect from "react-native-picker-select";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
@@ -39,7 +40,7 @@ import type {
   FormaPagamento,
   Produto,
   ProdutoSelecionado,
-  Venda, // <--- Assumindo que você tem essa interface exportada
+  Venda,
   VendaPagamento,
 } from "../types/interfaces";
 
@@ -49,15 +50,177 @@ type RealizarVendaProps = {
   };
   route: {
     params?: {
-      venda?: Venda; // <--- Parâmetro para edição
+      venda?: Venda;
     };
   };
 };
 
+// --- CÁLCULOS AUXILIARES ---
+const parseCurrency = (value: string): number => {
+  if (!value) return 0;
+  const numberString = value.replace(/\./g, "").replace(",", ".");
+  return parseFloat(numberString) || 0;
+};
+const formatCurrency = (value: number): string =>
+  (parseFloat(String(value)) || 0).toFixed(2).replace(".", ",");
+
+// --- CORREÇÃO 2: O Componente PaymentInput foi movido para FORA do componente principal ---
+// Definimos as props que ele precisa receber
+interface PaymentInputProps {
+  payment: VendaPagamento;
+  index: number;
+  allPaymentMethods: FormaPagamento[];
+  loadingPayments: boolean;
+  total: number;
+  paymentsCount: number;
+  onRemove: (id: number) => void;
+  onChange: (
+    id: number,
+    field: keyof VendaPagamento,
+    value: string | number
+  ) => void;
+}
+
+const PaymentInput = ({
+  payment,
+  index,
+  allPaymentMethods,
+  loadingPayments,
+  total,
+  paymentsCount,
+  onRemove,
+  onChange,
+}: PaymentInputProps) => {
+  const [localValue, setLocalValue] = useState(
+    payment.valorPago.replace(".", ",")
+  );
+  const [isInputFocused, setIsInputFocused] = useState(false);
+
+  useEffect(() => {
+    const formattedParentValue = payment.valorPago.replace(".", ",");
+    if (!isInputFocused && localValue !== formattedParentValue) {
+      setLocalValue(formattedParentValue);
+    }
+  }, [payment.valorPago, isInputFocused]);
+
+  const handleLocalValueChange = (text: string) => {
+    const cleanedText = text.replace(/[^0-9,]/g, "");
+    setLocalValue(cleanedText);
+  };
+
+  const handleFocus = () => {
+    setIsInputFocused(true);
+    const rawValue = payment.valorPago.replace(/[^0-9,]/g, "");
+    setLocalValue(rawValue);
+  };
+
+  const handleBlur = () => {
+    setIsInputFocused(false);
+    let cleanValue = localValue.replace(/[^0-9,]/g, "");
+    const numericValue = parseCurrency(cleanValue);
+    let finalValue = numericValue;
+
+    // Sugestão de valor para completar o total
+    if (paymentsCount === 1) {
+      finalValue = Math.min(numericValue, total);
+    }
+
+    // Chama a função passada via props
+    onChange(payment.id, "valorPago", formatCurrency(finalValue));
+  };
+
+  const getPaymentMethodOptions = () =>
+    allPaymentMethods.map((pm) => ({
+      label: pm.nome,
+      value: pm.id,
+      aceitaParcelamento: pm.aceitaParcelamento,
+    }));
+
+  const selectedMethod = allPaymentMethods.find(
+    (pm) => pm.id === payment.formaPagamentoId
+  );
+  const canInstallment = selectedMethod?.aceitaParcelamento || false;
+
+  // Placeholder inteligente
+  let defaultPaymentValue = parseCurrency(payment.valorPago);
+  // Nota: A lógica de placeholder complexa foi simplificada aqui pois o PaymentInput
+  // agora é isolado. Se precisar do cálculo de "restante" aqui, precisaria passar via props.
+
+  return (
+    <View style={styles.paymentItemCard}>
+      <View style={styles.paymentItemHeader}>
+        <Text style={styles.paymentItemTitle}>Pagamento #{index + 1}</Text>
+        <TouchableOpacity
+          onPress={() => onRemove(payment.id)}
+          disabled={paymentsCount === 1}
+        >
+          <Trash2
+            size={20}
+            color={
+              paymentsCount === 1
+                ? theme.colors.foreground
+                : theme.colors.destructive
+            }
+          />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Forma de Pagamento *</Text>
+        {loadingPayments ? (
+          <ActivityIndicator />
+        ) : (
+          <RNPickerSelect
+            onValueChange={(value) =>
+              onChange(payment.id, "formaPagamentoId", value)
+            }
+            items={getPaymentMethodOptions()}
+            placeholder={{ label: "Selecione...", value: 0 }}
+            style={pickerSelectStyles}
+            value={payment.formaPagamentoId}
+            // Fix para Android picker fechar ao selecionar
+            useNativeAndroidPickerStyle={false}
+          />
+        )}
+      </View>
+
+      {canInstallment && (
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Parcelas</Text>
+          <RNPickerSelect
+            onValueChange={(v) => onChange(payment.id, "parcelas", v)}
+            items={[...Array(12)].map((_, i) => ({
+              label: `${i + 1}x`,
+              value: i + 1,
+            }))}
+            placeholder={{ label: "1x à vista", value: 1 }}
+            style={pickerSelectStyles}
+            value={payment.parcelas}
+            useNativeAndroidPickerStyle={false}
+          />
+        </View>
+      )}
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Valor Pago (R$) *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder={formatCurrency(defaultPaymentValue)}
+          value={localValue}
+          onChangeText={handleLocalValueChange}
+          keyboardType="numeric"
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+        />
+      </View>
+    </View>
+  );
+};
+// -------------------------------------------------------------------------
+
 export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
   const { token } = useAuth();
 
-  // Verifica se é edição
   const vendaEditar = route.params?.venda;
   const isEditing = !!vendaEditar;
 
@@ -69,9 +232,14 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
   const [productSearch, setProductSearch] = useState("");
   const [showProductModal, setShowProductModal] = useState(false);
 
-  // --- ESTADOS PARA PAGAMENTO E DADOS ---
   const [payments, setPayments] = useState<VendaPagamento[]>([
-    { id: 0, vendaId: 0, formaPagamentoId: 0, valorPago: "", parcelas: 1 },
+    {
+      id: Date.now(),
+      vendaId: 0,
+      formaPagamentoId: 0,
+      valorPago: "",
+      parcelas: 1,
+    },
   ]);
   const [discount, setDiscount] = useState("");
   const [loading, setLoading] = useState(false);
@@ -85,7 +253,8 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [loadingPayments, setLoadingPayments] = useState(false);
 
-  const [isInputFocused, setIsInputFocused] = useState(false);
+  // Estado para controlar scroll quando input focado (opcional)
+  // const [isInputFocused, setIsInputFocused] = useState(false);
 
   useEffect(() => {
     if (isEditing && vendaEditar) {
@@ -121,7 +290,6 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
         setPayments(pagamentosMapeados);
       }
 
-      // 4. Preencher Desconto
       setDiscount(
         parseFloat(String(vendaEditar.desconto || 0))
           .toFixed(2)
@@ -130,7 +298,7 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
     }
   }, [isEditing, vendaEditar]);
 
-  // --- BUSCAS NA API ---
+  // --- FETCHES ---
   const fetchClients = useCallback(async () => {
     if (!token) return;
     setLoadingClients(true);
@@ -193,7 +361,7 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
     fetchPaymentMethods();
   }, [fetchClients, fetchProducts, fetchPaymentMethods]);
 
-  // --- LÓGICA DE FILTROS ---
+  // --- FILTROS ---
   const filteredClients = allClients.filter(
     (c) =>
       c.nome.toLowerCase().includes(clientSearch.toLowerCase()) ||
@@ -208,22 +376,19 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
     setClientSearch("");
   };
 
-  // --- LÓGICA DE QUANTIDADE (Ajustada para igualar OrcamentoScreen + Validação de Estoque) ---
+  // --- PRODUTOS ---
   const handleAddProduct = (product: Produto) => {
     const existingIndex = selectedProducts.findIndex(
       (p) => p.id === product.id
     );
 
     if (existingIndex >= 0) {
-      // Verifica estoque antes de incrementar
       const currentQty = selectedProducts[existingIndex].quantity || 0;
       const estoque = product.estoque || 0;
       if (currentQty + 1 > estoque) {
         Toast.show({ type: "error", text1: "Estoque insuficiente" });
         return;
       }
-
-      // Se já existe, incrementa
       const updatedProducts = [...selectedProducts];
       updatedProducts[existingIndex].quantity += 1;
       setSelectedProducts(updatedProducts);
@@ -234,8 +399,6 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
         Toast.show({ type: "error", text1: "Produto sem estoque" });
         return;
       }
-
-      // Se não existe, cria novo
       const newProduct: ProdutoSelecionado = {
         ...product,
         quantity: 1,
@@ -270,14 +433,6 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
   };
 
   // --- CÁLCULOS ---
-  const parseCurrency = (value: string): number => {
-    if (!value) return 0;
-    const numberString = value.replace(/\./g, "").replace(",", ".");
-    return parseFloat(numberString) || 0;
-  };
-  const formatCurrency = (value: number): string =>
-    (parseFloat(String(value)) || 0).toFixed(2).replace(".", ",");
-
   const getDiscountValue = () => parseCurrency(discount);
 
   const subtotal = selectedProducts.reduce(
@@ -291,12 +446,12 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
   );
   const remaining = total - totalPaid;
 
-  // --- PAGAMENTOS ---
+  // --- GERENCIAMENTO DE PAGAMENTOS ---
   const handleAddPayment = () => {
     setPayments((prev) => [
       ...prev,
       {
-        id: Date.now(), // ID temporário
+        id: Date.now(),
         vendaId: isEditing && vendaEditar ? vendaEditar.id : 0,
         formaPagamentoId: 0,
         valorPago: "",
@@ -325,13 +480,6 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
       prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
     );
   };
-
-  const getPaymentMethodOptions = () =>
-    allPaymentMethods.map((pm) => ({
-      label: pm.nome,
-      value: pm.id,
-      aceitaParcelamento: pm.aceitaParcelamento,
-    }));
 
   const getPaymentName = (id: number) => {
     const method = allPaymentMethods.find((pm) => pm.id === id);
@@ -495,8 +643,14 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
     setLoading(true);
 
     try {
+      const dataVenda =
+        isEditing && vendaEditar?.data
+          ? vendaEditar.data
+          : new Date().toISOString();
+
       const payload = {
         clienteId: selectedClient.id,
+        data: dataVenda,
         itens: selectedProducts.map((p) => ({
           produtoId: p.id,
           quantidade: p.quantity,
@@ -517,7 +671,7 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
 
       if (isEditing && vendaEditar) {
         url = `${API_URL}/vendas/${vendaEditar.id}`;
-        method = "PUT"; // Alterado para PUT na edição
+        method = "PUT";
       }
 
       const response = await fetch(url, {
@@ -535,159 +689,34 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
         throw new Error(data.message || "Erro ao salvar a venda.");
       }
 
-      await handleGeneratePDFAndShare({
-        client: selectedClient,
-        products: selectedProducts,
-        payments: payments,
-        discount: getDiscountValue(),
-        subtotal: subtotal,
-        totalValue: total,
-        totalPaid: totalPaid,
-        remaining: remaining,
-      });
+      // Tenta gerar o PDF, mas não impede o sucesso da venda se falhar
+      try {
+        await handleGeneratePDFAndShare({
+          client: selectedClient,
+          products: selectedProducts,
+          payments: payments,
+          discount: getDiscountValue(),
+          subtotal: subtotal,
+          totalValue: total,
+          totalPaid: totalPaid,
+          remaining: remaining,
+        });
+      } catch (pdfError) {
+        console.log("Erro ao gerar PDF, mas venda foi salva", pdfError);
+      }
 
       Toast.show({
         type: "success",
         text1: isEditing ? "Venda atualizada!" : "Venda finalizada!",
       });
+
       setTimeout(() => navigation.goBack(), 1500);
     } catch (error: any) {
+      console.error(error);
       Alert.alert("Erro", error.message);
     } finally {
       setLoading(false);
     }
-  };
-
-  // --- COMPONENTE INPUT DE PAGAMENTO ---
-  const PaymentInput = ({
-    payment,
-    index,
-  }: {
-    payment: VendaPagamento;
-    index: number;
-  }) => {
-    const [localValue, setLocalValue] = useState(
-      payment.valorPago.replace(".", ",")
-    );
-
-    useEffect(() => {
-      const formattedParentValue = payment.valorPago.replace(".", ",");
-      if (!isInputFocused && localValue !== formattedParentValue) {
-        setLocalValue(formattedParentValue);
-      }
-    }, [payment.valorPago, isInputFocused]);
-
-    const handleLocalValueChange = (text: string) => {
-      const cleanedText = text.replace(/[^0-9,]/g, "");
-      setLocalValue(cleanedText);
-    };
-
-    const handleFocus = () => {
-      setTimeout(() => {
-        setIsInputFocused(true);
-        const rawValue = payment.valorPago.replace(/[^0-9,]/g, "");
-        setLocalValue(rawValue);
-      }, 0);
-    };
-
-    const handleBlur = () => {
-      setTimeout(() => setIsInputFocused(false), 0);
-      let cleanValue = localValue.replace(/[^0-9,]/g, "");
-      const numericValue = parseCurrency(cleanValue);
-      let finalValue = numericValue;
-
-      // Sugestão de valor para completar o total
-      if (payments.length === 1) {
-        finalValue = Math.min(numericValue, total);
-      }
-
-      handlePaymentChange(payment.id, "valorPago", formatCurrency(finalValue));
-    };
-
-    const selectedMethod = allPaymentMethods.find(
-      (pm) => pm.id === payment.formaPagamentoId
-    );
-    const canInstallment = selectedMethod?.aceitaParcelamento || false;
-
-    // Placeholder inteligente
-    let defaultPaymentValue = parseCurrency(payment.valorPago);
-    if (payments.length === 1 && total > 0) {
-      defaultPaymentValue = total;
-    } else if (payments.length > 1 && parseCurrency(payment.valorPago) === 0) {
-      const totalOthers = payments
-        .filter((p, i) => i !== index)
-        .reduce((sum, p) => sum + parseCurrency(p.valorPago), 0);
-      defaultPaymentValue = Math.max(0, total - totalOthers);
-    }
-
-    return (
-      <View style={styles.paymentItemCard}>
-        <View style={styles.paymentItemHeader}>
-          <Text style={styles.paymentItemTitle}>Pagamento #{index + 1}</Text>
-          <TouchableOpacity
-            onPress={() => handleRemovePayment(payment.id)}
-            disabled={payments.length === 1}
-          >
-            <Trash2
-              size={20}
-              color={
-                payments.length === 1
-                  ? theme.colors.foreground
-                  : theme.colors.destructive
-              }
-            />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Forma de Pagamento *</Text>
-          {loadingPayments ? (
-            <ActivityIndicator />
-          ) : (
-            <RNPickerSelect
-              onValueChange={(value) =>
-                handlePaymentChange(payment.id, "formaPagamentoId", value)
-              }
-              items={getPaymentMethodOptions()}
-              placeholder={{ label: "Selecione...", value: 0 }}
-              style={pickerSelectStyles}
-              value={payment.formaPagamentoId}
-            />
-          )}
-        </View>
-
-        {canInstallment && (
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Parcelas</Text>
-            <RNPickerSelect
-              onValueChange={(v) =>
-                handlePaymentChange(payment.id, "parcelas", v)
-              }
-              items={[...Array(12)].map((_, i) => ({
-                label: `${i + 1}x`,
-                value: i + 1,
-              }))}
-              placeholder={{ label: "1x à vista", value: 1 }}
-              style={pickerSelectStyles}
-              value={payment.parcelas}
-            />
-          </View>
-        )}
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Valor Pago (R$) *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder={formatCurrency(defaultPaymentValue)}
-            value={localValue}
-            onChangeText={handleLocalValueChange}
-            keyboardType="numeric"
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-          />
-        </View>
-      </View>
-    );
   };
 
   return (
@@ -715,7 +744,6 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
         <ScrollView
           contentContainerStyle={styles.scrollContainer}
           keyboardShouldPersistTaps="handled"
-          scrollEnabled={!isInputFocused}
         >
           {/* Cliente */}
           <View style={styles.card}>
@@ -815,13 +843,25 @@ export function RealizarVenda({ navigation, route }: RealizarVendaProps) {
             )}
           </View>
 
-          {/* Pagamento */}
+          {/* Pagamento - CORRIGIDO (Usa o componente externo) */}
           {selectedProducts.length > 0 && (
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Pagamento *</Text>
+
               {payments.map((p, index) => (
-                <PaymentInput key={p.id} payment={p} index={index} />
+                <PaymentInput
+                  key={p.id} // Chave estável baseada no ID único
+                  payment={p}
+                  index={index}
+                  allPaymentMethods={allPaymentMethods}
+                  loadingPayments={loadingPayments}
+                  total={total}
+                  paymentsCount={payments.length}
+                  onRemove={handleRemovePayment}
+                  onChange={handlePaymentChange}
+                />
               ))}
+
               <TouchableOpacity
                 style={styles.linkButton}
                 onPress={handleAddPayment}

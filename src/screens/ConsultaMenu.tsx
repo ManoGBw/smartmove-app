@@ -8,7 +8,7 @@ import {
   Users,
 } from "lucide-react-native";
 import React from "react";
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { theme } from "../theme/colors";
 
@@ -67,11 +67,7 @@ export function ConsultaMenu({ navigation }: ConsultaMenuProps) {
     } else if (optionId === "rotas") {
       navigation.navigate("ConsultaRota");
     } else if (optionId === "vendas") {
-      // Futuramente: navigation.navigate("ConsultaVenda");
-      Alert.alert(
-        "Em desenvolvimento",
-        "A tela de consulta de vendas está em construção."
-      );
+      navigation.navigate("ConsultaVenda");
     } else if (optionId === "orcamentos") {
       navigation.navigate("ConsultaOrcamento");
     }
