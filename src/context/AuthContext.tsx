@@ -10,6 +10,8 @@ interface User {
   id: number;
   email: string;
   status: string;
+  nome?: string;
+  raio?: number;
 }
 
 interface AuthContextData {

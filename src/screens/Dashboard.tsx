@@ -40,10 +40,10 @@ const menuItems = [
     color: "#2E1E43",
   },
   {
-    id: "cadastros",
-    title: "Cadastros",
-    subtitle: "Clientes, produtos",
-    icon: Users,
+    id: "orcamento",
+    title: "Orçamento",
+    subtitle: "Criar orçamento",
+    icon: FileText,
     color: "#A5A4E0",
   },
   {
@@ -54,10 +54,10 @@ const menuItems = [
     color: "#2E1E43",
   },
   {
-    id: "orcamento",
-    title: "Orçamento",
-    subtitle: "Criar orçamento",
-    icon: FileText,
+    id: "cadastros",
+    title: "Cadastros",
+    subtitle: "Clientes, produtos",
+    icon: Users,
     color: "#A5A4E0",
   },
   {
@@ -68,10 +68,10 @@ const menuItems = [
     color: "#2E1E43",
   },
   {
-    id: "relatorios",
-    title: "Relatórios",
-    subtitle: "Análises e dados",
-    icon: BarChart3,
+    id: "consultar",
+    title: "Consultar",
+    subtitle: "Cliente, venda, orçamento...",
+    icon: Search,
     color: "#A5A4E0",
   },
   {
@@ -82,10 +82,10 @@ const menuItems = [
     color: "#2E1E43",
   },
   {
-    id: "consultar",
-    title: "Consultar",
-    subtitle: "Cliente, venda, orçamento...",
-    icon: Search,
+    id: "relatorios",
+    title: "Relatórios",
+    subtitle: "Análises e dados",
+    icon: BarChart3,
     color: "#A5A4E0",
   },
 ];
@@ -109,6 +109,8 @@ export function Dashboard({ navigation }: DashboardProps) {
       navigation.navigate("PlanejamentoRotas");
     } else if (screenId === "relatorios") {
       navigation.navigate("RelatoriosScreen");
+    } else if (screenId === "configuracoes") {
+      navigation.navigate("ConfiguracoesScreen");
     } else {
       // Para os outros botões que ainda não têm tela
       Alert.alert(
