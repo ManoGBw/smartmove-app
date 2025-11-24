@@ -54,7 +54,7 @@ const consultaOptions = [
     title: "Consultar Rotas",
     subtitle: "Buscar rotas cadastradas",
     icon: ArrowDownUp,
-    color: "#2E1E43", // Cor primária
+    color: "#A5A4E0", // Cor primária
   },
 ];
 
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   headerIconContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryForeground,
     borderRadius: theme.radius.lg,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -153,11 +153,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: "bold",
-    color: theme.colors.primaryForeground,
+    color: theme.colors.primary,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: theme.colors.muted,
+    color: theme.colors.mutedForeground,
   },
   content: {
     padding: theme.spacing.lg,

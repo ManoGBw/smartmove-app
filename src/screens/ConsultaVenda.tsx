@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  Ban,
   Pencil,
   Plus,
   Search,
@@ -60,8 +61,6 @@ export function ConsultaVenda({ navigation }: ConsultaVendaProps) {
       const data = await response.json();
       const lista = Array.isArray(data) ? data : data.data || [];
 
-      // Ordenar por data (mais recente primeiro)
-      // Assegure-se que sua API retorna o campo 'data' em formato ISO ou compatível
       const listaOrdenada = lista.sort(
         (a: Venda, b: Venda) =>
           new Date(b.data).getTime() - new Date(a.data).getTime()
@@ -77,7 +76,6 @@ export function ConsultaVenda({ navigation }: ConsultaVendaProps) {
     }
   }, [token]);
 
-  // Recarrega a lista ao focar na tela (útil se você editou uma venda e voltou)
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", fetchVendas);
     return unsubscribe;
@@ -99,14 +97,68 @@ export function ConsultaVenda({ navigation }: ConsultaVendaProps) {
     }
   };
 
-  // Formata data para PT-BR
+  // ... código anterior
+
+  // --- CANCELAR VENDA ---
+  const handleCancelVenda = async (id: number) => {
+    Alert.alert(
+      "Cancelar Venda",
+      "Tem certeza que deseja cancelar esta venda? O estoque será devolvido.",
+      [
+        { text: "Não", style: "cancel" },
+        {
+          text: "Sim, Cancelar",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // CORREÇÃO: Ajustado para a rota que você forneceu (PATCH /vendas/:id)
+              // Antes estava /vendas/${id}/cancelar
+              const response = await fetch(`${API_URL}/vendas/${id}`, {
+                method: "PATCH",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+              });
+
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || "Erro ao cancelar venda");
+              }
+
+              Alert.alert("Sucesso", "Venda cancelada com sucesso!");
+
+              // Atualiza a lista localmente para refletir a mudança
+              const updatedVendas = vendas.map((v) =>
+                v.id === id ? { ...v, status: "CANCELADA" } : v
+              );
+              setVendas(updatedVendas);
+              setFilteredVendas(
+                searchQuery
+                  ? updatedVendas.filter(
+                      (v) =>
+                        v.cliente?.nome
+                          .toLowerCase()
+                          .includes(searchQuery.toLowerCase()) ||
+                        v.id.toString().includes(searchQuery)
+                    )
+                  : updatedVendas
+              );
+            } catch (error: any) {
+              Alert.alert("Erro", error.message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const formatDate = (dateString: string) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
     return date.toLocaleDateString("pt-BR");
   };
 
-  // Formata moeda
   const formatCurrency = (value: string | number) => {
     const num = Number(value);
     return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -114,7 +166,6 @@ export function ConsultaVenda({ navigation }: ConsultaVendaProps) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -124,7 +175,6 @@ export function ConsultaVenda({ navigation }: ConsultaVendaProps) {
           <View style={{ width: 24 }} />
         </View>
 
-        {/* Barra de Pesquisa */}
         <View style={styles.searchContainer}>
           <Search
             size={20}
@@ -141,7 +191,6 @@ export function ConsultaVenda({ navigation }: ConsultaVendaProps) {
         </View>
       </View>
 
-      {/* Lista */}
       <View style={styles.content}>
         {loading ? (
           <ActivityIndicator
@@ -162,7 +211,6 @@ export function ConsultaVenda({ navigation }: ConsultaVendaProps) {
                     item.status === "CANCELADA" && styles.itemCancelado,
                   ]}
                 >
-                  {/* Ícone e Infos */}
                   <View style={styles.infoContainer}>
                     <View
                       style={[
@@ -176,10 +224,17 @@ export function ConsultaVenda({ navigation }: ConsultaVendaProps) {
                     </View>
 
                     <View style={styles.textContainer}>
-                      <Text style={styles.cardTitle}>Venda #{item.id}</Text>
-                      <Text style={styles.cardDate}>
-                        {formatDate(item.data)}
-                      </Text>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <Text style={styles.cardTitle}>Venda #{item.id}</Text>
+                        <Text style={styles.cardDate}>
+                          {formatDate(item.data)}
+                        </Text>
+                      </View>
 
                       <Text style={styles.cardSubtitle}>
                         {item.cliente?.nome || "Cliente não identificado"}
@@ -188,7 +243,6 @@ export function ConsultaVenda({ navigation }: ConsultaVendaProps) {
                         {formatCurrency(item.valorTotal)}
                       </Text>
 
-                      {/* Badge de Status */}
                       <View style={styles.statusRow}>
                         <View
                           style={[
@@ -196,10 +250,10 @@ export function ConsultaVenda({ navigation }: ConsultaVendaProps) {
                             {
                               backgroundColor:
                                 item.status === "CONCLUIDA" ||
-                                item.status === "APROVADA" // Ajuste conforme retorno da API
+                                item.status === "APROVADA"
                                   ? "green"
                                   : item.status === "CANCELADA"
-                                  ? "red"
+                                  ? theme.colors.destructive
                                   : "orange",
                             },
                           ]}
@@ -211,17 +265,28 @@ export function ConsultaVenda({ navigation }: ConsultaVendaProps) {
                     </View>
                   </View>
 
-                  {/* Ações */}
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() =>
-                      navigation.navigate("RealizarVenda", {
-                        venda: item, // Passa o objeto venda para edição/visualização
-                      })
-                    }
-                  >
-                    <Pencil size={20} color={theme.colors.primary} />
-                  </TouchableOpacity>
+                  {/* Container de Ações */}
+                  <View style={styles.actionsContainer}>
+                    {/* Botão Editar/Ver */}
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() =>
+                        navigation.navigate("RealizarVenda", { venda: item })
+                      }
+                    >
+                      <Pencil size={20} color={theme.colors.primary} />
+                    </TouchableOpacity>
+
+                    {/* Botão Cancelar (Só aparece se não estiver cancelada) */}
+                    {item.status !== "CANCELADA" && (
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.cancelButton]}
+                        onPress={() => handleCancelVenda(item.id)}
+                      >
+                        <Ban size={20} color={theme.colors.destructive} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               ))
             )}
@@ -229,7 +294,6 @@ export function ConsultaVenda({ navigation }: ConsultaVendaProps) {
         )}
       </View>
 
-      {/* Botão Flutuante (FAB) para Nova Venda */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => navigation.navigate("RealizarVenda")}
@@ -295,8 +359,6 @@ const styles = StyleSheet.create({
     marginTop: 40,
     fontSize: 16,
   },
-
-  // Card Styles
   card: {
     backgroundColor: "white",
     borderRadius: 16,
@@ -314,7 +376,8 @@ const styles = StyleSheet.create({
   },
   itemCancelado: {
     borderLeftColor: theme.colors.destructive,
-    opacity: 0.8,
+    opacity: 0.7,
+    backgroundColor: "#FFF5F5", // Fundo levemente avermelhado
   },
   infoContainer: {
     flexDirection: "row",
@@ -341,7 +404,6 @@ const styles = StyleSheet.create({
   cardDate: {
     fontSize: 12,
     color: "#888",
-    marginBottom: 2,
   },
   cardSubtitle: {
     fontSize: 14,
@@ -370,11 +432,21 @@ const styles = StyleSheet.create({
     color: "#666",
   },
 
+  // Novos estilos para os botões de ação
+  actionsContainer: {
+    flexDirection: "column",
+    gap: 8,
+    marginLeft: 8,
+  },
   actionButton: {
     padding: 8,
     backgroundColor: "#F5F5F5",
     borderRadius: 8,
-    marginLeft: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelButton: {
+    backgroundColor: "#FEE2E2", // Vermelho bem claro
   },
 
   fab: {
