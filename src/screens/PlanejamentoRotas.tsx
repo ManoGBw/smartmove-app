@@ -11,7 +11,7 @@ import {
   Trash2,
   X,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -32,7 +32,6 @@ import { theme } from "../theme/colors";
 import type { Cliente, Rota, Venda } from "../types/interfaces";
 import { generateRouteFromSaved, generateSmartRoute } from "../utils/routeAI";
 
-// --- Decodificador de Polyline ---
 const decodePolyline = (encoded: string) => {
   const poly = [];
   let index = 0,
@@ -74,7 +73,6 @@ interface RotaOtimizadaResponse {
   clientesOrdenados: Cliente[];
 }
 
-// --- Modal de Busca de Clientes ---
 const SearchModal = ({
   visible,
   onClose,
@@ -85,24 +83,50 @@ const SearchModal = ({
   mode = "single",
 }: any) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [allClients, setAllClients] = useState<Cliente[]>([]);
   const [results, setResults] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const handleSearch = async (query: string) => {
-    setSearchQuery(query);
-    if (query.length < 3) return;
+  useEffect(() => {
+    if (visible) {
+      fetchAllClients();
+      setSearchQuery("");
+    }
+  }, [visible]);
+
+  const fetchAllClients = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/clientes?nome=${query}`, {
+      const response = await fetch(`${API_URL}/clientes`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
-      setResults(data.data || data);
+      const lista = Array.isArray(data) ? data : data.data || [];
+
+      setAllClients(lista);
+      setResults(lista);
     } catch (error) {
       console.error(error);
+      Alert.alert("Erro", "Falha ao carregar lista de clientes.");
     } finally {
       setLoading(false);
     }
+  };
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    if (!query) {
+      setResults(allClients);
+      return;
+    }
+
+    const lowerText = query.toLowerCase();
+    const filtered = allClients.filter(
+      (item) =>
+        item.nome.toLowerCase().includes(lowerText) ||
+        (item.documento && item.documento.includes(lowerText))
+    );
+
+    setResults(filtered);
   };
 
   return (
@@ -123,6 +147,7 @@ const SearchModal = ({
           <TextInput
             style={styles.input}
             placeholder={placeholder}
+            value={searchQuery}
             onChangeText={handleSearch}
             autoFocus
           />
@@ -142,10 +167,13 @@ const SearchModal = ({
                 >
                   <Text style={styles.resultText}>{item.nome}</Text>
                   <Text style={{ fontSize: 12, color: "#888" }}>
-                    {item.endereco}
+                    {item.endereco || "Sem endereço cadastrado"}
                   </Text>
                 </TouchableOpacity>
               )}
+              ListEmptyComponent={
+                <Text style={styles.emptyText}>Nenhum cliente encontrado.</Text>
+              }
             />
           )}
         </View>
@@ -154,7 +182,6 @@ const SearchModal = ({
   );
 };
 
-// --- Modal de Seleção de Rotas Salvas ---
 const RouteSelectionModal = ({ visible, onClose, onSelect, token }: any) => {
   const [rotas, setRotas] = useState<Rota[]>([]);
   const [loading, setLoading] = useState(false);
@@ -240,7 +267,6 @@ const RouteSelectionModal = ({ visible, onClose, onSelect, token }: any) => {
   );
 };
 
-// --- Componente Principal ---
 export function PlanejamentoRotas({ navigation }: any) {
   const { token, user } = useAuth();
 
@@ -294,11 +320,9 @@ export function PlanejamentoRotas({ navigation }: any) {
       }),
     ]);
 
-    // Lê o JSON apenas uma vez
     const jsonClientes = await resClientes.json();
     const jsonVendas = await resVendas.json();
 
-    // Trata a estrutura
     const allClients: Cliente[] = Array.isArray(jsonClientes)
       ? jsonClientes
       : jsonClientes.data || [];
@@ -309,7 +333,6 @@ export function PlanejamentoRotas({ navigation }: any) {
     return { allClients, allSales };
   };
 
-  // --- LÓGICA 1: IA POR RAIO (Geolocalização) ---
   const handleSmartRouteByRadius = async (centerClient: Cliente) => {
     setModalVisible(false);
     setLoadingSmart(true);
@@ -352,7 +375,6 @@ export function PlanejamentoRotas({ navigation }: any) {
     }
   };
 
-  // --- LÓGICA 2: IA POR ROTA CADASTRADA (Bairros) ---
   const handleSelectSavedRoute = async (selectedRota: Rota) => {
     const bairrosIds =
       selectedRota.itensRota?.map((item) => item.bairro.id) || [];
@@ -405,8 +427,6 @@ export function PlanejamentoRotas({ navigation }: any) {
     }
   };
 
-  // ... (Funções padrão de otimização e renderização mantidas abaixo) ...
-
   const handleRemoveDestino = (id: number) => {
     setDestinos(destinos.filter((d) => d.id !== id));
   };
@@ -426,8 +446,6 @@ export function PlanejamentoRotas({ navigation }: any) {
 
     setLoadingOtimizacao(true);
     try {
-      // Se não tiver origem definida, usamos o primeiro cliente da lista como origem temporária
-      // ou forçamos o usuário a definir. Aqui, forçamos definir origem.
       const payload = {
         origemId: origem!.id,
         clienteIds: destinos.map((d) => d.id),

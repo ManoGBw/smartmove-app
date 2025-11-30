@@ -82,7 +82,6 @@ export function ConsultaCliente({ navigation }: ConsultaClienteProps) {
     setFilteredClients(filtered);
   }, [searchQuery, clients]);
 
-  // Componente para renderizar cada item da lista
   const ClientItem = ({ client }: { client: Cliente }) => (
     <View
       style={[
