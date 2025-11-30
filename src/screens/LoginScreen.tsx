@@ -1,7 +1,7 @@
 import { Eye, EyeOff, Lock, Mail } from "lucide-react-native";
 import React, { useState } from "react";
 import {
-  ActivityIndicator, // Importe o ActivityIndicator para o loading
+  ActivityIndicator,
   Alert,
   Image,
   StyleSheet,
@@ -36,26 +36,18 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
 
     setLoading(true);
     try {
-      // Apenas chame a função login do contexto. É só isso!
-      // A lógica de API, salvar token, etc., está toda dentro dela.
       await login(email, password);
-      // Se o login for bem-sucedido, o AppNavigator fará o redirecionamento automático.
     } catch (error) {
-      // O AuthContext já mostra o alerta de erro.
-      // Podemos adicionar um console.log aqui para depuração, se quisermos.
       console.log("A tela de login recebeu uma notificação de erro.");
     } finally {
       setLoading(false);
     }
   };
 
-  // A função de navegação para outras telas não muda
   const navigateTo = (screen: string) => {
     navigation.navigate(screen);
   };
 
-  // 4. O SEU CÓDIGO VISUAL (JSX) CONTINUA EXATAMENTE O MESMO
-  // A única mudança é no botão "Entrar" para mostrar o loading.
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -147,10 +139,7 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
   );
 }
 
-// 5. SEU STYLESHEET TAMBÉM NÃO MUDA
-// Apenas certifique-se de que o estilo buttonDisabled existe.
 const styles = StyleSheet.create({
-  // ... (cole todos os seus estilos aqui, exatamente como estavam antes)
   container: {
     flex: 1,
     backgroundColor: "#f0f0f3",
