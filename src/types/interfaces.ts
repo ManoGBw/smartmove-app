@@ -2,6 +2,7 @@ export interface Municipio {
   id: number;
   nome: string;
   uf: string;
+  cep?: string | null;
 }
 
 export interface Bairro {
@@ -20,9 +21,10 @@ export interface Cliente {
   email: string | null;
   latitude: number | null;
   longitude: number | null;
-  status: string; // "ATIVO" ou "INATIVO"
+  status: string;
   bairro?: Bairro;
   bairroId: number;
+  cep?: string | null;
 }
 
 export interface ItemRota {

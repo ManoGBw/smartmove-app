@@ -106,28 +106,24 @@ type CadastroClienteProps = {
 export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
   const { token } = useAuth();
 
-  // Verifica se veio um cliente para edição
   const clienteEditar = route.params?.cliente;
   const isEditing = !!clienteEditar;
 
-  // Estados do Formulário
   const [nome, setNome] = useState("");
   const [cpf, setCpf] = useState("");
   const [telefone, setTelefone] = useState("");
   const [email, setEmail] = useState("");
   const [endereco, setEndereco] = useState("");
+  const [cep, setCep] = useState("");
 
-  // Estados de Seleção
   const [selectedMunicipio, setSelectedMunicipio] = useState<Municipio | null>(
     null
   );
   const [selectedBairro, setSelectedBairro] = useState<Bairro | null>(null);
 
-  // Estados dos Modais
   const [modalMunicipioVisible, setModalMunicipioVisible] = useState(false);
   const [modalBairroVisible, setModalBairroVisible] = useState(false);
 
-  // Estados de Busca
   const [searchResultsMunicipio, setSearchResultsMunicipio] = useState<
     Municipio[]
   >([]);
@@ -137,7 +133,6 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
   const [latitude, setLatitude] = useState<number | string | null>(null);
   const [longitude, setLongitude] = useState<number | string | null>(null);
 
-  // --- NOVO: POPULAR CAMPOS NA EDIÇÃO ---
   useEffect(() => {
     if (isEditing && clienteEditar) {
       setNome(clienteEditar.nome);
@@ -145,15 +140,13 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
       setTelefone(clienteEditar.telefone || "");
       setEmail(clienteEditar.email || "");
       setEndereco(clienteEditar.endereco || "");
+      setCep(clienteEditar.cep || "");
       setLatitude(clienteEditar.latitude);
       setLongitude(clienteEditar.longitude);
 
-      // Lógica para preencher Bairro e Município automaticamente
-      // Nota: O objeto cliente vindo da lista precisa ter o 'bairro' populado (include no Prisma)
       if (clienteEditar.bairro) {
         setSelectedBairro(clienteEditar.bairro);
 
-        // Se o bairro tiver o município aninhado, preenchemos também
         if (clienteEditar.bairro.municipio) {
           setSelectedMunicipio(clienteEditar.bairro.municipio);
         }
@@ -218,14 +211,18 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
     [token, selectedMunicipio]
   );
 
-  // --- HANDLERS ---
   const handleSelectMunicipio = (item: Municipio) => {
     setSelectedMunicipio(item);
     setModalMunicipioVisible(false);
 
-    // Resetar bairro ao trocar cidade
     setSelectedBairro(null);
     setSearchResultsBairro([]);
+
+    if (item.cep) {
+      setCep(item.cep);
+    } else {
+      setCep("");
+    }
   };
 
   const handleSelectBairro = (item: Bairro) => {
@@ -234,8 +231,11 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
   };
 
   const handleSave = async () => {
-    if (!nome || !selectedBairro) {
-      Alert.alert("Atenção", "Preencha o nome e selecione Cidade e Bairro.");
+    if (!nome || !selectedBairro || !cep) {
+      Alert.alert(
+        "Atenção",
+        "Preencha o nome, CEP eselecione Cidade e Bairro."
+      );
       return;
     }
 
@@ -247,6 +247,7 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
         telefone: telefone || null,
         email: email || null,
         endereco: endereco || null,
+        cep: cep,
         bairroId: selectedBairro.id,
         status: "ATIVO",
         latitude: latitude || 0,
@@ -349,7 +350,18 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
                 : "Selecione a cidade..."}
             </Text>
             <ChevronDown size={20} color="#666" />
+
+            {/*CEP*/}
           </TouchableOpacity>
+          <Text style={styles.label}>CEP *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="00000-000"
+            keyboardType="numeric"
+            value={cep}
+            onChangeText={setCep}
+            maxLength={9}
+          />
 
           {/* BAIRRO */}
           <Text style={styles.label}>Bairro *</Text>
