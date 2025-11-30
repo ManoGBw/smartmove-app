@@ -18,6 +18,11 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBANfPmLuVu-idG3sgUF1Q2NI8k30QbS-M"
+        }
+      },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.manoela_berw.smartmoveapp"
