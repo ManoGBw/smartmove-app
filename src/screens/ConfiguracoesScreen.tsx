@@ -1,5 +1,3 @@
-// src/screens/ConfiguracoesScreen.tsx
-
 import { ArrowLeft, Building2, MapPin, Save } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -15,9 +13,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { API_URL } from "../constants/config";
-import { useAuth } from "../context/AuthContext";
-import { theme } from "../theme/colors";
+import { API_URL } from "../constants/config"; //
+import { useAuth } from "../context/AuthContext"; //
+import { theme } from "../theme/colors"; //
 
 type ConfiguracoesScreenProps = {
   navigation: {
@@ -29,32 +27,34 @@ export function ConfiguracoesScreen({ navigation }: ConfiguracoesScreenProps) {
   const { user, token } = useAuth();
 
   const [nomeEmpresa, setNomeEmpresa] = useState("");
+  const [endereco, setEndereco] = useState("");
   const [raioKm, setRaioKm] = useState("");
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
-  // Carregar dados atuais do usuário
   useEffect(() => {
     const fetchUserData = async () => {
-      if (!user || !token) return;
+      if (!token) return;
 
       try {
-        // Ajuste a rota conforme sua API (ex: /usuarios/me ou /usuarios/{id})
-        const response = await fetch(`${API_URL}/usuarios/${user.id}`, {
+        const response = await fetch(`${API_URL}/usuarios/`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
         if (response.ok) {
+          console.log("Configurações carregadas com sucesso!");
           const data = await response.json();
-          // Verifica se os dados vieram diretamente ou dentro de um objeto "data"
-          const usuario = data.data || data;
+          const usuario = data;
 
-          setNomeEmpresa(usuario.nome || "");
-          setRaioKm(usuario.raio ? String(usuario.raio) : "");
+          setNomeEmpresa(usuario.nomeEmpresa || "");
+          setEndereco(usuario.endereco || "");
+
+          if (usuario.configuracao && usuario.configuracao.alcanceRaio) {
+            setRaioKm(String(usuario.configuracao.alcanceRaio));
+          }
         }
       } catch (error) {
         console.error("Erro ao carregar configurações:", error);
-        // Não exibimos alerta aqui para não bloquear o fluxo, apenas logamos
       } finally {
         setInitialLoading(false);
       }
@@ -64,19 +64,18 @@ export function ConfiguracoesScreen({ navigation }: ConfiguracoesScreenProps) {
   }, [user, token]);
 
   const handleSave = async () => {
-    if (!user || !token) return;
-
+    if (!token) return;
     setLoading(true);
     try {
-      // Converte raio para número, se preenchido
       const raioValue = raioKm ? parseFloat(raioKm.replace(",", ".")) : null;
 
       const payload = {
-        nome: nomeEmpresa,
-        raio: raioValue,
+        nomeEmpresa: nomeEmpresa,
+        endereco: endereco,
+        alcanceRaio: raioValue,
       };
 
-      const response = await fetch(`${API_URL}/usuarios/${user.id}`, {
+      const response = await fetch(`${API_URL}/usuarios/`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -85,8 +84,9 @@ export function ConfiguracoesScreen({ navigation }: ConfiguracoesScreenProps) {
         body: JSON.stringify(payload),
       });
 
+      const result = await response.json();
       if (!response.ok) {
-        throw new Error("Falha ao atualizar configurações.");
+        throw new Error(result.message || "Falha ao atualizar configurações.");
       }
 
       Alert.alert("Sucesso", "Configurações atualizadas com sucesso!");
@@ -127,6 +127,7 @@ export function ConfiguracoesScreen({ navigation }: ConfiguracoesScreenProps) {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView contentContainerStyle={styles.content}>
+          {/* Card da Empresa e Endereço */}
           <View style={styles.card}>
             <View style={styles.sectionHeader}>
               <Building2 size={20} color={theme.colors.primary} />
@@ -135,9 +136,6 @@ export function ConfiguracoesScreen({ navigation }: ConfiguracoesScreenProps) {
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Nome da Empresa</Text>
-              <Text style={styles.helperText}>
-                Este nome será utilizado nos relatórios e cabeçalhos.
-              </Text>
               <TextInput
                 style={styles.input}
                 placeholder="Ex: Minha Distribuidora Ltda"
@@ -145,8 +143,25 @@ export function ConfiguracoesScreen({ navigation }: ConfiguracoesScreenProps) {
                 onChangeText={setNomeEmpresa}
               />
             </View>
+
+            {/* Novo Campo de Endereço */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Endereço Completo</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Rua, Número, Bairro, Cidade - UF"
+                value={endereco}
+                onChangeText={setEndereco}
+                multiline={true}
+              />
+              <Text style={styles.helperText}>
+                Este endereço será utilizado como ponto de partida para as rotas
+                quando não informado outra localização.
+              </Text>
+            </View>
           </View>
 
+          {/* Card de Logística */}
           <View style={styles.card}>
             <View style={styles.sectionHeader}>
               <MapPin size={20} color={theme.colors.primary} />
@@ -239,7 +254,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: theme.colors.primary,
   },
-  inputGroup: { marginBottom: 8 },
+  inputGroup: { marginBottom: 12 },
   label: {
     fontSize: 14,
     fontWeight: "600",
@@ -249,7 +264,7 @@ const styles = StyleSheet.create({
   helperText: {
     fontSize: 12,
     color: "#888",
-    marginBottom: 8,
+    marginTop: 4,
   },
   input: {
     backgroundColor: theme.colors.inputBackground,
