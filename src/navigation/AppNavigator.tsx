@@ -13,6 +13,7 @@ import { CadastrosMenu } from "../screens/CadastrosMenu";
 import { ConfiguracoesScreen } from "../screens/ConfiguracoesScreen";
 import { ConsultaBairro } from "../screens/ConsultaBairro";
 import { ConsultaCliente } from "../screens/ConsultaCliente";
+import { ConsultaFormaPagamento } from "../screens/ConsultaFormaPagamento";
 import { ConsultaMenu } from "../screens/ConsultaMenu";
 import { ConsultaOrcamento } from "../screens/ConsultaOrcamento";
 import { ConsultaRota } from "../screens/ConsultaRota";
@@ -62,6 +63,10 @@ const AppRoutes = () => (
     <AppStack.Screen name="RelatoriosScreen" component={RelatoriosScreen} />
     <AppStack.Screen name="ConsultaOrcamento" component={ConsultaOrcamento} />
     <AppStack.Screen name="ConsultaVenda" component={ConsultaVenda} />
+    <AppStack.Screen
+      name="ConsultaFormaPagamento"
+      component={ConsultaFormaPagamento}
+    />
     <AppStack.Screen
       name="ConfiguracoesScreen"
       component={ConfiguracoesScreen}

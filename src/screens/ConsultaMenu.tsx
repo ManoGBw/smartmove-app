@@ -56,6 +56,13 @@ const consultaOptions = [
     icon: ArrowDownUp,
     color: "#A5A4E0", // Cor primária
   },
+  {
+    id: "formapagamento",
+    title: "Consultar Formas de Pagamento",
+    subtitle: "Buscar Formas de Pagamento cadastradas ",
+    icon: ArrowDownUp,
+    color: "#2E1E43",
+  },
 ];
 
 export function ConsultaMenu({ navigation }: ConsultaMenuProps) {
@@ -70,6 +77,8 @@ export function ConsultaMenu({ navigation }: ConsultaMenuProps) {
       navigation.navigate("ConsultaVenda");
     } else if (optionId === "orcamentos") {
       navigation.navigate("ConsultaOrcamento");
+    } else if (optionId === "formapagamento") {
+      navigation.navigate("ConsultaFormaPagamento");
     }
   };
 
@@ -122,7 +131,6 @@ export function ConsultaMenu({ navigation }: ConsultaMenuProps) {
   );
 }
 
-// ... (os estilos permanecem os mesmos)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
