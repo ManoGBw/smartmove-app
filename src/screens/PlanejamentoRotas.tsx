@@ -1,9 +1,11 @@
 // src/screens/PlanejamentoRotas.tsx
 
+import * as Location from "expo-location"; // <--- 1. IMPORTAR EXPO LOCATION
 import {
   ArrowLeft,
   BrainCircuit,
   Calendar,
+  LocateFixed, // <--- 2. NOVO ÍCONE
   MapPin,
   Navigation,
   Plus,
@@ -26,12 +28,12 @@ import {
   View,
 } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+import Toast from "react-native-toast-message";
 import { API_URL } from "../constants/config";
 import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
 import type { Cliente, Rota, Venda } from "../types/interfaces";
 import { generateRouteFromSaved, generateSmartRoute } from "../utils/routeAI";
-
 const decodePolyline = (encoded: string) => {
   const poly = [];
   let index = 0,
@@ -73,6 +75,7 @@ interface RotaOtimizadaResponse {
   clientesOrdenados: Cliente[];
 }
 
+// --- MODAL DE BUSCA ATUALIZADO ---
 const SearchModal = ({
   visible,
   onClose,
@@ -81,6 +84,8 @@ const SearchModal = ({
   placeholder,
   token,
   mode = "single",
+  onUseCurrentLocation, // <--- Nova Prop
+  loadingLocation, // <--- Nova Prop
 }: any) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [allClients, setAllClients] = useState<Cliente[]>([]);
@@ -144,12 +149,34 @@ const SearchModal = ({
               <X size={24} color="#333" />
             </TouchableOpacity>
           </View>
+
+          {/* --- BOTÃO DE LOCALIZAÇÃO ATUAL --- */}
+          {mode === "single" && onUseCurrentLocation && (
+            <TouchableOpacity
+              style={styles.locationButton}
+              onPress={onUseCurrentLocation}
+              disabled={loadingLocation}
+            >
+              {loadingLocation ? (
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+              ) : (
+                <LocateFixed size={20} color={theme.colors.primary} />
+              )}
+              <Text style={styles.locationButtonText}>
+                {loadingLocation
+                  ? "Obtendo localização..."
+                  : "Usar minha localização atual"}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {/* ---------------------------------- */}
+
           <TextInput
             style={styles.input}
             placeholder={placeholder}
             value={searchQuery}
             onChangeText={handleSearch}
-            autoFocus
+            autoFocus={!loadingLocation} // Evita abrir teclado se estiver carregando GPS
           />
           {loading ? (
             <ActivityIndicator color={theme.colors.primary} />
@@ -281,6 +308,7 @@ export function PlanejamentoRotas({ navigation }: any) {
 
   const [loadingOtimizacao, setLoadingOtimizacao] = useState(false);
   const [loadingSmart, setLoadingSmart] = useState(false);
+  const [loadingLocation, setLoadingLocation] = useState(false); // <--- Loading do GPS
 
   const [resultado, setResultado] = useState<RotaOtimizadaResponse | null>(
     null
@@ -295,6 +323,53 @@ export function PlanejamentoRotas({ navigation }: any) {
     setModalVisible(true);
   };
 
+  // --- NOVA FUNÇÃO: PEGAR LOCALIZAÇÃO ATUAL ---
+  const handleGetCurrentLocation = async () => {
+    setLoadingLocation(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permissão negada",
+          "Precisamos de acesso à localização para usar sua posição atual."
+        );
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      // Cria um objeto Cliente fictício para representar a localização atual
+      const currentLocationClient: Cliente = {
+        id: -1, // ID negativo para indicar que não é um cliente do banco
+        nome: "Minha Localização",
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        endereco: "Localização GPS",
+        // Campos obrigatórios preenchidos com null/empty
+        documento: null,
+        telefone: null,
+        email: null,
+        status: "ATIVO",
+        bairroId: 0,
+      };
+
+      if (modalMode === "origem") {
+        setOrigem(currentLocationClient);
+      } else if (modalMode === "smart_center") {
+        handleSmartRouteByRadius(currentLocationClient);
+      }
+
+      setModalVisible(false);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Erro", "Não foi possível obter a localização.");
+    } finally {
+      setLoadingLocation(false);
+    }
+  };
+
   const handleSelectClient = (item: Cliente) => {
     if (modalMode === "origem") {
       setOrigem(item);
@@ -303,13 +378,19 @@ export function PlanejamentoRotas({ navigation }: any) {
     } else {
       if (!destinos.find((d) => d.id === item.id) && item.id !== origem?.id) {
         setDestinos([...destinos, item]);
+
+        Toast.show({
+          type: "success",
+          text1: `Cliente '${item.nome}' adicionado!`,
+          position: "top",
+          visibilityTime: 2000,
+        });
       } else {
         Alert.alert("Aviso", "Cliente já adicionado ou é a origem.");
       }
     }
   };
 
-  // --- FIX: Função auxiliar para buscar dados ---
   const fetchDataSafe = async () => {
     const [resClientes, resVendas] = await Promise.all([
       fetch(`${API_URL}/clientes`, {
@@ -375,6 +456,7 @@ export function PlanejamentoRotas({ navigation }: any) {
     }
   };
 
+  // ... (handleSelectSavedRoute, handleRemoveDestino, reset, etc. mantidos iguais) ...
   const handleSelectSavedRoute = async (selectedRota: Rota) => {
     const bairrosIds =
       selectedRota.itensRota?.map((item) => item.bairro.id) || [];
@@ -387,7 +469,6 @@ export function PlanejamentoRotas({ navigation }: any) {
     setLoadingSmart(true);
     try {
       const { allClients, allSales } = await fetchDataSafe();
-
       const analysis = generateRouteFromSaved(bairrosIds, allClients, allSales);
 
       if (analysis.clients.length === 0) {
@@ -400,24 +481,12 @@ export function PlanejamentoRotas({ navigation }: any) {
       }
 
       setDestinos(analysis.clients);
-
       setSuggestedDateInfo(
         `Rota "${
           selectedRota.nome
         }": Melhor data sugerida ${analysis.suggestedDate.toLocaleDateString(
           "pt-BR"
         )}`
-      );
-
-      Alert.alert(
-        "Rota Carregada",
-        `Importamos ${
-          analysis.clients.length
-        } clientes desta rota.\n\nData sugerida de visita: ${analysis.suggestedDate.toLocaleDateString(
-          "pt-BR"
-        )}\n(Média de recompra: ${analysis.averageDaysUntilPurchase.toFixed(
-          0
-        )} dias)`
       );
     } catch (error) {
       console.error(error);
@@ -431,6 +500,12 @@ export function PlanejamentoRotas({ navigation }: any) {
     setDestinos(destinos.filter((d) => d.id !== id));
   };
 
+  const reset = () => {
+    setResultado(null);
+    setSuggestedDateInfo(null);
+  };
+
+  // --- OTIMIZAR ROTA ---
   const handleOtimizar = async () => {
     if (!origem && destinos.length > 0) {
       Alert.alert(
@@ -446,10 +521,19 @@ export function PlanejamentoRotas({ navigation }: any) {
 
     setLoadingOtimizacao(true);
     try {
-      const payload = {
+      // Prepara o payload
+      const payload: any = {
         origemId: origem!.id,
         clienteIds: destinos.map((d) => d.id),
       };
+
+      // Se a origem for a localização GPS (ID -1), enviamos as coordenadas
+      // NOTA: O Backend precisa estar preparado para receber 'originLat'/'originLng'
+      // caso o 'origemId' seja inválido ou negativo.
+      if (origem!.id === -1) {
+        payload.originLat = origem!.latitude;
+        payload.originLng = origem!.longitude;
+      }
 
       const response = await fetch(`${API_URL}/rotas/otimizar`, {
         method: "POST",
@@ -472,11 +556,7 @@ export function PlanejamentoRotas({ navigation }: any) {
     }
   };
 
-  const reset = () => {
-    setResultado(null);
-    setSuggestedDateInfo(null);
-  };
-
+  // ... (renderResultado mantido igual) ...
   const renderResultado = () => {
     if (!resultado) return null;
     const coordsPolyline = decodePolyline(resultado.polyline);
@@ -551,8 +631,8 @@ export function PlanejamentoRotas({ navigation }: any) {
               {origem?.latitude && (
                 <Marker
                   coordinate={{
-                    latitude: origem.latitude || 0,
-                    longitude: origem.longitude || 0,
+                    latitude: Number(origem.latitude),
+                    longitude: Number(origem.longitude),
                   }}
                   title={`Início: ${origem.nome}`}
                   pinColor="green"
@@ -564,8 +644,8 @@ export function PlanejamentoRotas({ navigation }: any) {
                     <Marker
                       key={cliente.id}
                       coordinate={{
-                        latitude: cliente.latitude || 0,
-                        longitude: cliente.longitude || 0,
+                        latitude: Number(cliente.latitude),
+                        longitude: Number(cliente.longitude),
                       }}
                       title={`${index + 1}. ${cliente.nome}`}
                       description={cliente.endereco || ""}
@@ -644,9 +724,9 @@ export function PlanejamentoRotas({ navigation }: any) {
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
           {/* Botões de Inteligência */}
-          <View style={{ flexDirection: "row", gap: 10, marginBottom: 20 }}>
+          <View style={{ flexDirection: "column", gap: 10, marginBottom: 20 }}>
             <TouchableOpacity
-              style={[styles.smartButton, { flex: 1 }]}
+              style={[styles.smartButton, { width: "100%" }]}
               onPress={() => openSearch("smart_center")}
               disabled={loadingSmart}
             >
@@ -654,7 +734,11 @@ export function PlanejamentoRotas({ navigation }: any) {
                 size={24}
                 color={theme.colors.secondaryForeground}
               />
-              <Text style={styles.smartButtonTitleSmall}>IA por Raio</Text>
+              <Text style={styles.smartButtonTitleSmall}>Rota Inteligente</Text>
+              <Text style={styles.subtitleSmartButton}>
+                Utilize o Raio em KM cadastrado para buscar cliente recomendados
+                para visita e a Data mais adequada
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -667,7 +751,10 @@ export function PlanejamentoRotas({ navigation }: any) {
             >
               <RouteIcon size={24} color="white" />
               <Text style={[styles.smartButtonTitleSmall, { color: "white" }]}>
-                Rota Salva
+                Minhas Rotas
+              </Text>
+              <Text style={styles.subtitle2SmartButton}>
+                Gere a relação de clientes de um rota cadastrado no sistema
               </Text>
             </TouchableOpacity>
           </View>
@@ -685,7 +772,17 @@ export function PlanejamentoRotas({ navigation }: any) {
               style={styles.selectInput}
               onPress={() => openSearch("origem")}
             >
-              <MapPin size={20} color={origem ? "green" : "#999"} />
+              {/* Muda a cor do ícone se for localização atual */}
+              <MapPin
+                size={20}
+                color={
+                  origem?.id === -1
+                    ? theme.colors.secondary
+                    : origem
+                    ? "green"
+                    : "#999"
+                }
+              />
               <Text style={[styles.selectText, !origem && { color: "#999" }]}>
                 {origem ? origem.nome : "Selecionar origem..."}
               </Text>
@@ -764,6 +861,7 @@ export function PlanejamentoRotas({ navigation }: any) {
         </ScrollView>
       )}
 
+      {/* --- MODAL COM CALLBACK DE LOCALIZAÇÃO --- */}
       <SearchModal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
@@ -782,6 +880,8 @@ export function PlanejamentoRotas({ navigation }: any) {
             ? "single"
             : "multi"
         }
+        onUseCurrentLocation={handleGetCurrentLocation}
+        loadingLocation={loadingLocation}
       />
 
       <RouteSelectionModal
@@ -967,19 +1067,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
   },
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 10,
-    marginBottom: 20,
-  },
-  dividerText: {
-    flex: 1,
-    textAlign: "center",
-    color: "#999",
-    fontSize: 12,
-    fontWeight: "bold",
-  },
   helperTextHighlight: {
     textAlign: "center",
     color: theme.colors.primary,
@@ -989,7 +1076,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
 
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -1023,4 +1109,30 @@ const styles = StyleSheet.create({
     borderBottomColor: "#EEE",
   },
   resultText: { fontSize: 16, color: "#333" },
+
+  locationButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EEF2FF",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    justifyContent: "center",
+    gap: 8,
+  },
+  locationButtonText: {
+    color: theme.colors.primary,
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  subtitle2SmartButton: {
+    fontSize: 12,
+    color: theme.colors.muted,
+  },
+  subtitleSmartButton: {
+    fontSize: 12,
+    color: theme.colors.secondaryForeground,
+  },
 });

@@ -72,3 +72,4 @@ src/
 - `npx expo install expo-print npx expo install expo-sharing` - instalar biblioteca para gerar PDF
 - `npx expo install expo-build-properties` - Instalar pluggin necessario para rodar api sem certificado SSL
 - `eas build -p android --profile preview` - compilar em apk
+- `npx expo install expo-location` - pacote de localização para utilizar no inicio das rotas
