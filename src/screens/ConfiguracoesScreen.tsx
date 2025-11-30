@@ -154,10 +154,7 @@ export function ConfiguracoesScreen({ navigation }: ConfiguracoesScreenProps) {
                 onChangeText={setEndereco}
                 multiline={true}
               />
-              <Text style={styles.helperText}>
-                Este endereço será utilizado como ponto de partida para as rotas
-                quando não informado outra localização.
-              </Text>
+              <Text style={styles.helperText}>Endereço da Empresa.</Text>
             </View>
           </View>
 
