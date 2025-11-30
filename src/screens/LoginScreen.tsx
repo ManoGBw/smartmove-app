@@ -4,6 +4,9 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -50,91 +53,106 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Image
-            source={require("../../assets/logo.png")}
-            style={styles.logoImage}
-          />
-          <Text style={styles.subtitle}>Faça login para continuar</Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Entrar</Text>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>E-mail</Text>
-            <View style={styles.inputContainer}>
-              <Mail
-                color={theme.colors.foreground}
-                size={16}
-                style={styles.icon}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.content}>
+            <View style={styles.header}>
+              <Image
+                source={require("../../assets/logo.png")}
+                style={styles.logoImage}
               />
-              <TextInput
-                style={styles.input}
-                placeholder="seu@email.com"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                placeholderTextColor={theme.colors.foreground}
-              />
+              <Text style={styles.subtitle}>Faça login para continuar</Text>
             </View>
-          </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Senha</Text>
-            <View style={styles.inputContainer}>
-              <Lock
-                color={theme.colors.foreground}
-                size={16}
-                style={styles.icon}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="••••••••"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                placeholderTextColor={theme.colors.foreground}
-              />
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Entrar</Text>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>E-mail</Text>
+                <View style={styles.inputContainer}>
+                  <Mail
+                    color={theme.colors.foreground}
+                    size={16}
+                    style={styles.icon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="seu@email.com"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    placeholderTextColor={theme.colors.foreground}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Senha</Text>
+                <View style={styles.inputContainer}>
+                  <Lock
+                    color={theme.colors.foreground}
+                    size={16}
+                    style={styles.icon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="••••••••"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    placeholderTextColor={theme.colors.foreground}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeIcon}
+                  >
+                    {showPassword ? (
+                      <EyeOff color={theme.colors.foreground} size={16} />
+                    ) : (
+                      <Eye color={theme.colors.foreground} size={16} />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <TouchableOpacity onPress={() => navigateTo("ForgotPassword")}>
+                <Text style={styles.forgotPassword}>Esqueci minha senha</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeIcon}
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={handleLogin}
+                disabled={loading}
               >
-                {showPassword ? (
-                  <EyeOff color={theme.colors.foreground} size={16} />
+                {loading ? (
+                  <ActivityIndicator color="#ffffff" />
                 ) : (
-                  <Eye color={theme.colors.foreground} size={16} />
+                  <Text style={styles.buttonText}>Entrar</Text>
                 )}
               </TouchableOpacity>
+
+              <View style={styles.footerTextContainer}>
+                <Text style={styles.footerText}>Não tem uma conta? </Text>
+                <TouchableOpacity onPress={() => navigateTo("Register")}>
+                  <Text style={[styles.footerText, styles.link]}>
+                    Criar conta
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-
-          <TouchableOpacity onPress={() => navigateTo("ForgotPassword")}>
-            <Text style={styles.forgotPassword}>Esqueci minha senha</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.buttonText}>Entrar</Text>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.footerTextContainer}>
-            <Text style={styles.footerText}>Não tem uma conta? </Text>
-            <TouchableOpacity onPress={() => navigateTo("Register")}>
-              <Text style={[styles.footerText, styles.link]}>Criar conta</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -143,6 +161,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f0f0f3",
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
     padding: theme.spacing.xl,
   },
@@ -154,9 +175,9 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   logoImage: {
-    marginTop: 60,
+    marginTop: 20,
     width: 350,
-    height: 250,
+    height: 180,
     resizeMode: "contain",
     marginBottom: 1,
   },
@@ -206,6 +227,7 @@ const styles = StyleSheet.create({
   eyeIcon: {
     position: "absolute",
     right: 15,
+    padding: 10,
   },
   input: {
     flex: 1,

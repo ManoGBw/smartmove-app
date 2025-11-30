@@ -931,7 +931,6 @@ const styles = StyleSheet.create({
   stepTitle: { fontSize: 16, fontWeight: "bold", color: "#333" },
   stepSubtitle: { fontSize: 12, color: "#666", marginTop: 4 },
 
-  // --- Styles do Botão Inteligente ---
   smartButton: {
     backgroundColor: theme.colors.secondary,
     borderRadius: 12,
