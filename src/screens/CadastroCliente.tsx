@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Switch, // <--- Importar Switch
   Text,
   TextInput,
   TouchableOpacity,
@@ -18,6 +19,7 @@ import { useAuth } from "../context/AuthContext";
 import { theme } from "../theme/colors";
 import type { Bairro, Cliente, Municipio } from "../types/interfaces";
 
+// ... (SearchModal permanece igual) ...
 const SearchModal = ({
   visible,
   onClose,
@@ -115,6 +117,8 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
   const [email, setEmail] = useState("");
   const [endereco, setEndereco] = useState("");
   const [cep, setCep] = useState("");
+  // 1. Novo estado para Status (Padrão: true/ATIVO)
+  const [statusAtivo, setStatusAtivo] = useState(true);
 
   const [selectedMunicipio, setSelectedMunicipio] = useState<Municipio | null>(
     null
@@ -143,6 +147,8 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
       setCep(clienteEditar.cep || "");
       setLatitude(clienteEditar.latitude);
       setLongitude(clienteEditar.longitude);
+      // 2. Carregar o status ao editar
+      setStatusAtivo(clienteEditar.status === "ATIVO");
 
       if (clienteEditar.bairro) {
         setSelectedBairro(clienteEditar.bairro);
@@ -234,7 +240,7 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
     if (!nome || !selectedBairro || !cep) {
       Alert.alert(
         "Atenção",
-        "Preencha o nome, CEP eselecione Cidade e Bairro."
+        "Preencha o nome, CEP e selecione Cidade e Bairro."
       );
       return;
     }
@@ -249,7 +255,8 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
         endereco: endereco || null,
         cep: cep,
         bairroId: selectedBairro.id,
-        status: "ATIVO",
+        // 3. Enviar o status correto
+        status: statusAtivo ? "ATIVO" : "INATIVO",
         latitude: latitude || 0,
         longitude: longitude || 0,
       };
@@ -295,7 +302,6 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
         >
           <ArrowLeft size={24} color="white" />
         </TouchableOpacity>
-        {/* Título Dinâmico */}
         <Text style={styles.headerTitle}>
           {isEditing ? "Editar Cliente" : "Novo Cliente"}
         </Text>
@@ -350,9 +356,8 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
                 : "Selecione a cidade..."}
             </Text>
             <ChevronDown size={20} color="#666" />
-
-            {/*CEP*/}
           </TouchableOpacity>
+
           <Text style={styles.label}>CEP *</Text>
           <TextInput
             style={styles.input}
@@ -441,6 +446,36 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
             />
           </View>
         </View>
+
+        {/* 4. NOVA SEÇÃO DE STATUS (Igual ao CadastroBairro.tsx) */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Situação</Text>
+
+          <View style={styles.switchContainer}>
+            <Text style={styles.switchLabel}>Status do Cadastro</Text>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+            >
+              <Text
+                style={{
+                  color: statusAtivo
+                    ? theme.colors.primary
+                    : theme.colors.foreground,
+                  fontWeight: "bold",
+                }}
+              >
+                {statusAtivo ? "ATIVO" : "INATIVO"}
+              </Text>
+              <Switch
+                trackColor={{ false: "#767577", true: theme.colors.secondary }}
+                thumbColor={statusAtivo ? theme.colors.primary : "#f4f3f4"}
+                ios_backgroundColor="#3e3e3e"
+                onValueChange={setStatusAtivo}
+                value={statusAtivo}
+              />
+            </View>
+          </View>
+        </View>
       </ScrollView>
 
       {/* Footer */}
@@ -455,7 +490,6 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
           ) : (
             <>
               <Check size={20} color="white" style={{ marginRight: 8 }} />
-              {/* Texto Dinâmico */}
               <Text style={styles.saveButtonText}>
                 {isEditing ? "Atualizar Cliente" : "Salvar Cliente"}
               </Text>
@@ -464,7 +498,7 @@ export function CadastroCliente({ navigation, route }: CadastroClienteProps) {
         </TouchableOpacity>
       </View>
 
-      {/* Uso dos Modais */}
+      {/* Uso dos Modais (sem alterações) */}
       <SearchModal
         visible={modalMunicipioVisible}
         onClose={() => setModalMunicipioVisible(false)}
@@ -552,6 +586,15 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   selectText: { fontSize: 16, color: "#333" },
+  // Novos estilos para o Switch
+  switchContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  switchLabel: { fontSize: 16, color: "#333" },
+
   footer: {
     position: "absolute",
     bottom: 0,
